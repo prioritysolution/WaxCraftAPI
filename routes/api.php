@@ -85,7 +85,7 @@ Route::group([
     Route::post('/Org/Master/AddCatagory',[ProcessMaster::class,'process_catagory']);
     Route::get('/Org/Master/GetCatagory/{org_id}',[ProcessMaster::class,'get_catagory_list']);
     Route::put('/Org/Master/UpdateCatagory',[ProcessMaster::class,'update_catagory']);
-    Route::poest('/Org/Master/AddModel',[ProcessMaster::class,'process_item_model']);
+    Route::post('/Org/Master/AddModel',[ProcessMaster::class,'process_item_model']);
     Route::get('/Org/Master/GetModel/{org_id}',[ProcessMaster::class,'get_model_list']);
     Route::put('/Org/Master/UpdateModel',[ProcessMaster::class,'update_model']);
     Route::get('/Org/Master/GetCatagoryModel/{org_id}/{cat_id}',[ProcessMaster::class,'get_catagory_model']);
