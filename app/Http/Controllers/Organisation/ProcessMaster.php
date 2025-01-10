@@ -301,7 +301,7 @@ class ProcessMaster extends Controller
             $db['database'] = $org_schema;
             config()->set('database.connections.wax', $db);
 
-            $sql = DB::connection('wax')->select("Select Id,Model_Name From mst_item_model Where Cat_Id=?;",[$cat_id]);
+            $sql = DB::connection('wax')->select("Select Id,Model_Name,Model_Sh_Name From mst_item_model Where Cat_Id=?;",[$cat_id]);
 
             if (empty($sql)) {
                 // Custom validation for no data found
@@ -860,6 +860,42 @@ class ProcessMaster extends Controller
         }
     }
 
+    public function get_size_wise_color(Int $org_id,Int $size_id){
+        try {
+            $sql = DB::select("Select UDF_GET_ORG_SCHEMA(?) as db;",[$org_id]);
+            if(!$sql){
+              throw new Exception;
+            }
+            $org_schema = $sql[0]->db;
+            $db = Config::get('database.connections.mysql');
+            $db['database'] = $org_schema;
+            config()->set('database.connections.wax', $db);
+
+            $sql = DB::connection('wax')->select("Select Id,Color_Name From mst_size_color Where Size_Id=?;",[$size_id]);
+
+            if (empty($sql)) {
+                // Custom validation for no data found
+                return response()->json([
+                    'message' => 'No Data Found',
+                    'details' => null,
+                ], 202);
+            }
+
+            return response()->json([
+                'message' => 'Data Found',
+                'details' => $sql,
+            ],200);
+
+        } catch (Exception $ex) {
+            $response = response()->json([
+                'message' => 'Error Found',
+                'details' => $ex->getMessage(),
+            ],400);
+
+            throw new HttpResponseException($response);
+        }
+    }
+
     public function update_size_color(Request $request){
         $validator = Validator::make($request->all(),[
             'org_id' => 'required',
@@ -925,5 +961,1071 @@ class ProcessMaster extends Controller
         
             throw new HttpResponseException($response);
     }
+    }
+
+    public function get_account_head(Int $org_id){
+        try {
+            $sql = DB::select("Select UDF_GET_ORG_SCHEMA(?) as db;",[$org_id]);
+            if(!$sql){
+              throw new Exception;
+            }
+            $org_schema = $sql[0]->db;
+            $db = Config::get('database.connections.mysql');
+            $db['database'] = $org_schema;
+            config()->set('database.connections.wax', $db);
+
+            $sql = DB::connection('wax')->select("Select Id,Head_Name From mst_org_acct_head;");
+
+            if (empty($sql)) {
+                // Custom validation for no data found
+                return response()->json([
+                    'message' => 'No Data Found',
+                    'details' => null,
+                ], 202);
+            }
+
+            return response()->json([
+                'message' => 'Data Found',
+                'details' => $sql,
+            ],200);
+
+        } catch (Exception $ex) {
+            $response = response()->json([
+                'message' => 'Error Found',
+                'details' => $ex->getMessage(),
+            ],400);
+
+            throw new HttpResponseException($response);
+        }
+    }
+
+    public function process_acct_head(Request $request){
+        $validator = Validator::make($request->all(),[
+            'org_id' => 'required',
+            'head_name' => 'required',
+            'under_head' => 'required'
+        ]);
+        if($validator->passes()){
+        try {
+
+            $sql = DB::select("Select UDF_GET_ORG_SCHEMA(?) as db;",[$request->org_id]);
+            if(!$sql){
+              throw new Exception;
+            }
+            $org_schema = $sql[0]->db;
+            $db = Config::get('database.connections.mysql');
+            $db['database'] = $org_schema;
+            config()->set('database.connections.wax', $db);
+            DB::connection('wax')->beginTransaction();
+            $sql = DB::connection('wax')->statement("Call USP_ADD_EDIT_ACCOUNTS_HEAD(?,?,?,?,?,@error,@message);",[null,$request->head_name,$request->under_head,auth()->user()->Id,1]);
+
+            if(!$sql){
+                throw new Exception('Operation Error Found !!');
+            }
+            $result = DB::connection('wax')->select("Select @error As Error_No,@message As Message;");
+            $error_No = $result[0]->Error_No;
+            $message = $result[0]->Message;
+
+            if($error_No<0){
+                DB::connection('wax')->rollBack();
+                return response()->json([
+                    'message' => $message,
+                    'details' => null,
+                ],202);
+            }
+            else{
+                DB::connection('wax')->commit();
+                return response()->json([
+                    'message' => 'Accounts Head Successfully Added !!',
+                    'details' => null,
+                ],200);
+            }
+            
+        } catch (Exception $ex) {
+            DB::connection('wax')->rollBack();
+            $response = response()->json([
+                'message' => $ex->getMessage(),
+                'details' => null,
+            ],400);
+
+            throw new HttpResponseException($response);
+        }
+    }
+    else{
+        $errors = $validator->errors();
+
+            $response = response()->json([
+                'message' => $errors->messages(),
+                'details' => null,
+            ],202);
+        
+            throw new HttpResponseException($response);
+    }
+    }
+
+    public function get_acct_head_list(Int $org_id){
+        try {
+            $sql = DB::select("Select UDF_GET_ORG_SCHEMA(?) as db;",[$org_id]);
+            if(!$sql){
+              throw new Exception;
+            }
+            $org_schema = $sql[0]->db;
+            $db = Config::get('database.connections.mysql');
+            $db['database'] = $org_schema;
+            config()->set('database.connections.wax', $db);
+
+            $sql = DB::connection('wax')->select("Select m.Id,m.Head_Id As Main_Head,m.Sub_Head_Name,h.Head_Name From mst_org_acct_sub_head m Join mst_org_acct_head h On h.Id=m.Head_Id;");
+
+            if (empty($sql)) {
+                // Custom validation for no data found
+                return response()->json([
+                    'message' => 'No Data Found',
+                    'details' => null,
+                ], 202);
+            }
+
+            return response()->json([
+                'message' => 'Data Found',
+                'details' => $sql,
+            ],200);
+
+        } catch (Exception $ex) {
+            $response = response()->json([
+                'message' => 'Error Found',
+                'details' => $ex->getMessage(),
+            ],400);
+
+            throw new HttpResponseException($response);
+        }
+    }
+
+    public function update_acct_head(Request $request){
+        $validator = Validator::make($request->all(),[
+            'org_id' => 'required',
+            'head_id' => 'required',
+            'head_name' => 'required',
+            'under_head' => 'required'
+        ]);
+        if($validator->passes()){
+        try {
+
+            $sql = DB::select("Select UDF_GET_ORG_SCHEMA(?) as db;",[$request->org_id]);
+            if(!$sql){
+              throw new Exception;
+            }
+            $org_schema = $sql[0]->db;
+            $db = Config::get('database.connections.mysql');
+            $db['database'] = $org_schema;
+            config()->set('database.connections.wax', $db);
+            DB::connection('wax')->beginTransaction();
+            $sql = DB::connection('wax')->statement("Call USP_ADD_EDIT_ACCOUNTS_HEAD(?,?,?,?,?,@error,@message);",[$request->head_id,$request->head_name,$request->under_head,auth()->user()->Id,2]);
+
+            if(!$sql){
+                throw new Exception('Operation Error Found !!');
+            }
+            $result = DB::connection('wax')->select("Select @error As Error_No,@message As Message;");
+            $error_No = $result[0]->Error_No;
+            $message = $result[0]->Message;
+
+            if($error_No<0){
+                DB::connection('wax')->rollBack();
+                return response()->json([
+                    'message' => $message,
+                    'details' => null,
+                ],202);
+            }
+            else{
+                DB::connection('wax')->commit();
+                return response()->json([
+                    'message' => 'Accounts Head Successfully Updated !!',
+                    'details' => null,
+                ],200);
+            }
+            
+        } catch (Exception $ex) {
+            DB::connection('wax')->rollBack();
+            $response = response()->json([
+                'message' => $ex->getMessage(),
+                'details' => null,
+            ],400);
+
+            throw new HttpResponseException($response);
+        }
+    }
+    else{
+        $errors = $validator->errors();
+
+            $response = response()->json([
+                'message' => $errors->messages(),
+                'details' => null,
+            ],202);
+        
+            throw new HttpResponseException($response);
+    }
+    }
+
+    public function process_acct_ledger(Request $request){
+        $validator = Validator::make($request->all(),[
+            'org_id' => 'required',
+            'ledger_name' => 'required',
+            'open_balance' => 'required',
+        ]);
+        if($validator->passes()){
+        try {
+
+            $sql = DB::select("Select UDF_GET_ORG_SCHEMA(?) as db;",[$request->org_id]);
+            if(!$sql){
+              throw new Exception;
+            }
+            $org_schema = $sql[0]->db;
+            $db = Config::get('database.connections.mysql');
+            $db['database'] = $org_schema;
+            config()->set('database.connections.wax', $db);
+            DB::connection('wax')->beginTransaction();
+            $sql = DB::connection('wax')->statement("Call USP_ADD_EDIT_ACCT_LEDGER(?,?,?,?,?,?,?,@error,@message);",[null,$request->ledger_name,$request->head_id,$request->sub_head,$request->open_balance,auth()->user()->Id,1]);
+
+            if(!$sql){
+                throw new Exception('Operation Error Found !!');
+            }
+            $result = DB::connection('wax')->select("Select @error As Error_No,@message As Message;");
+            $error_No = $result[0]->Error_No;
+            $message = $result[0]->Message;
+
+            if($error_No<0){
+                DB::connection('wax')->rollBack();
+                return response()->json([
+                    'message' => $message,
+                    'details' => null,
+                ],202);
+            }
+            else{
+                DB::connection('wax')->commit();
+                return response()->json([
+                    'message' => 'Accounts Ledger Successfully Added !!',
+                    'details' => null,
+                ],200);
+            }
+            
+        } catch (Exception $ex) {
+            DB::connection('wax')->rollBack();
+            $response = response()->json([
+                'message' => $ex->getMessage(),
+                'details' => null,
+            ],400);
+
+            throw new HttpResponseException($response);
+        }
+    }
+    else{
+        $errors = $validator->errors();
+
+            $response = response()->json([
+                'message' => $errors->messages(),
+                'details' => null,
+            ],202);
+        
+            throw new HttpResponseException($response);
+    }
+    }
+
+    public function get_acct_ledger_list(Int $org_id){
+        try {
+            $sql = DB::select("Select UDF_GET_ORG_SCHEMA(?) as db;",[$org_id]);
+            if(!$sql){
+              throw new Exception;
+            }
+            $org_schema = $sql[0]->db;
+            $db = Config::get('database.connections.mysql');
+            $db['database'] = $org_schema;
+            config()->set('database.connections.wax', $db);
+
+            $sql = DB::connection('wax')->select("Select Id,Head_Id,Sub_Head,Ledger_Name,Open_Balance From mst_org_acct_ledger;");
+
+            if (empty($sql)) {
+                // Custom validation for no data found
+                return response()->json([
+                    'message' => 'No Data Found',
+                    'details' => null,
+                ], 202);
+            }
+
+            return response()->json([
+                'message' => 'Data Found',
+                'details' => $sql,
+            ],200);
+
+        } catch (Exception $ex) {
+            $response = response()->json([
+                'message' => 'Error Found',
+                'details' => $ex->getMessage(),
+            ],400);
+
+            throw new HttpResponseException($response);
+        }   
+    }
+
+    public function update_acct_ledger(Request $request){
+        $validator = Validator::make($request->all(),[
+            'org_id' => 'required',
+            'ledger_id' => 'required',
+            'ledger_name' => 'required',
+            'open_balance' => 'required',
+        ]);
+        if($validator->passes()){
+        try {
+
+            $sql = DB::select("Select UDF_GET_ORG_SCHEMA(?) as db;",[$request->org_id]);
+            if(!$sql){
+              throw new Exception;
+            }
+            $org_schema = $sql[0]->db;
+            $db = Config::get('database.connections.mysql');
+            $db['database'] = $org_schema;
+            config()->set('database.connections.wax', $db);
+            DB::connection('wax')->beginTransaction();
+            $sql = DB::connection('wax')->statement("Call USP_ADD_EDIT_ACCT_LEDGER(?,?,?,?,?,?,?,@error,@message);",[$request->ledger_id,$request->ledger_name,$request->head_id,$request->sub_head,$request->open_balance,auth()->user()->Id,2]);
+
+            if(!$sql){
+                throw new Exception('Operation Error Found !!');
+            }
+            $result = DB::connection('wax')->select("Select @error As Error_No,@message As Message;");
+            $error_No = $result[0]->Error_No;
+            $message = $result[0]->Message;
+
+            if($error_No<0){
+                DB::connection('wax')->rollBack();
+                return response()->json([
+                    'message' => $message,
+                    'details' => null,
+                ],202);
+            }
+            else{
+                DB::connection('wax')->commit();
+                return response()->json([
+                    'message' => 'Accounts Ledger Successfully Updated !!',
+                    'details' => null,
+                ],200);
+            }
+            
+        } catch (Exception $ex) {
+            DB::connection('wax')->rollBack();
+            $response = response()->json([
+                'message' => $ex->getMessage(),
+                'details' => null,
+            ],400);
+
+            throw new HttpResponseException($response);
+        }
+    }
+    else{
+        $errors = $validator->errors();
+
+            $response = response()->json([
+                'message' => $errors->messages(),
+                'details' => null,
+            ],202);
+        
+            throw new HttpResponseException($response);
+    }
+    }
+
+    public function get_purchase_ledger(Int $org_id){
+        try {
+            $sql = DB::select("Select UDF_GET_ORG_SCHEMA(?) as db;",[$org_id]);
+            if(!$sql){
+              throw new Exception;
+            }
+            $org_schema = $sql[0]->db;
+            $db = Config::get('database.connections.mysql');
+            $db['database'] = $org_schema;
+            config()->set('database.connections.wax', $db);
+
+            $sql = DB::connection('wax')->select("Select Id,Ledger_Name From mst_org_acct_ledger Where Head_Id=13
+                                                Union ALl
+                                                Select Id,Ledger_Name From mst_org_acct_ledger Where Sub_Head In(Select Id From mst_org_acct_sub_head Where Head_Id=13);");
+
+            if (empty($sql)) {
+                // Custom validation for no data found
+                return response()->json([
+                    'message' => 'No Data Found',
+                    'details' => null,
+                ], 202);
+            }
+
+            return response()->json([
+                'message' => 'Data Found',
+                'details' => $sql,
+            ],200);
+
+        } catch (Exception $ex) {
+            $response = response()->json([
+                'message' => 'Error Found',
+                'details' => $ex->getMessage(),
+            ],400);
+
+            throw new HttpResponseException($response);
+        }  
+    }
+
+    public function get_sales_ledger(Int $org_id){
+        try {
+            $sql = DB::select("Select UDF_GET_ORG_SCHEMA(?) as db;",[$org_id]);
+            if(!$sql){
+              throw new Exception;
+            }
+            $org_schema = $sql[0]->db;
+            $db = Config::get('database.connections.mysql');
+            $db['database'] = $org_schema;
+            config()->set('database.connections.wax', $db);
+
+            $sql = DB::connection('wax')->select("Select Id,Ledger_Name From mst_org_acct_ledger Where Head_Id=14
+                                                Union ALl
+                                                Select Id,Ledger_Name From mst_org_acct_ledger Where Sub_Head In(Select Id From mst_org_acct_sub_head Where Head_Id=14);");
+
+            if (empty($sql)) {
+                // Custom validation for no data found
+                return response()->json([
+                    'message' => 'No Data Found',
+                    'details' => null,
+                ], 202);
+            }
+
+            return response()->json([
+                'message' => 'Data Found',
+                'details' => $sql,
+            ],200);
+
+        } catch (Exception $ex) {
+            $response = response()->json([
+                'message' => 'Error Found',
+                'details' => $ex->getMessage(),
+            ],400);
+
+            throw new HttpResponseException($response);
+        } 
+    }
+
+    public function process_item(Request $request){
+        $validator = Validator::make($request->all(),[
+            'org_id' => 'required',
+            'open_date' => 'required',
+            'cat_id' => 'required',
+            'item_name' => 'required',
+            'item_sh_name' => 'required',
+            'item_unit' => 'required',
+            'pur_ledg' => 'required',
+            'sales_ledg' => 'required',
+            'cgst' => 'required',
+            'sgst' => 'required',
+            'igst' => 'required',
+            'pur_rate' => 'required',
+            'sales_rate' => 'required',
+            'open_qnty' => 'required',
+            'item_rate' => 'required',
+        ]);
+        if($validator->passes()){
+        try {
+
+            $sql = DB::select("Select UDF_GET_ORG_SCHEMA(?) as db;",[$request->org_id]);
+            if(!$sql){
+              throw new Exception;
+            }
+            $org_schema = $sql[0]->db;
+            $db = Config::get('database.connections.mysql');
+            $db['database'] = $org_schema;
+            config()->set('database.connections.wax', $db);
+            DB::connection('wax')->beginTransaction();
+            $sql = DB::connection('wax')->statement("Call USP_ADD_EDIT_ITEM(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,@error,@message);",[null,$request->open_date,$request->cat_id,$request->item_mod,$request->item_size,$request->item_color,$request->item_name,$request->item_sh_name,$request->item_unit,$request->pur_ledg,$request->sales_ledg,$request->cgst,$request->sgst,$request->igst,$request->pur_rate,$request->sales_rate,$request->open_qnty,$request->item_rate,auth()->user()->Id,1]);
+
+            if(!$sql){
+                throw new Exception('Operation Error Found !!');
+            }
+            $result = DB::connection('wax')->select("Select @error As Error_No,@message As Message;");
+            $error_No = $result[0]->Error_No;
+            $message = $result[0]->Message;
+
+            if($error_No<0){
+                DB::connection('wax')->rollBack();
+                return response()->json([
+                    'message' => $message,
+                    'details' => null,
+                ],202);
+            }
+            else{
+                DB::connection('wax')->commit();
+                return response()->json([
+                    'message' => 'Item Successfully Added !!',
+                    'details' => null,
+                ],200);
+            }
+            
+        } catch (Exception $ex) {
+            DB::connection('wax')->rollBack();
+            $response = response()->json([
+                'message' => $ex->getMessage(),
+                'details' => null,
+            ],400);
+
+            throw new HttpResponseException($response);
+        }
+    }
+    else{
+        $errors = $validator->errors();
+
+            $response = response()->json([
+                'message' => $errors->messages(),
+                'details' => null,
+            ],202);
+        
+            throw new HttpResponseException($response);
+    }
+    }
+
+    public function get_item_list(Int $org_id){
+        try {
+            $sql = DB::select("Select UDF_GET_ORG_SCHEMA(?) as db;",[$org_id]);
+            if(!$sql){
+              throw new Exception;
+            }
+            $org_schema = $sql[0]->db;
+            $db = Config::get('database.connections.mysql');
+            $db['database'] = $org_schema;
+            config()->set('database.connections.wax', $db);
+
+            $sql = DB::connection('wax')->select("Select m.Id,m.Cat_Id,m.Model_Id,m.Size_Id,m.Color_Id,m.Item_Name,m.Item_Sh_Name,m.Unit_Id,m.Purchase_Gl,m.Sales_Gl,m.CGST,m.SGST,m.IGST,m.Pur_Rate,m.Sale_Rate,c.Cat_Name,(Select Intem_Qnty From mst_item_stock Where Item_Id=m.Id) As Open_Qnty,(Select Item_Rate From mst_item_stock Where Item_Id=m.Id) As Item_Rate From mst_item_master m Join mst_item_catagary c On c.Id=m.Cat_Id;");
+
+            if (empty($sql)) {
+                // Custom validation for no data found
+                return response()->json([
+                    'message' => 'No Data Found',
+                    'details' => null,
+                ], 202);
+            }
+
+            return response()->json([
+                'message' => 'Data Found',
+                'details' => $sql,
+            ],200);
+
+        } catch (Exception $ex) {
+            $response = response()->json([
+                'message' => 'Error Found',
+                'details' => $ex->getMessage(),
+            ],400);
+
+            throw new HttpResponseException($response);
+        } 
+    }
+
+    public function update_item(Request $request){
+        $validator = Validator::make($request->all(),[
+            'org_id' => 'required',
+            'item_id' => 'required',
+            'open_date' => 'required',
+            'cat_id' => 'required',
+            'item_name' => 'required',
+            'item_sh_name' => 'required',
+            'item_unit' => 'required',
+            'pur_ledg' => 'required',
+            'sales_ledg' => 'required',
+            'cgst' => 'required',
+            'sgst' => 'required',
+            'igst' => 'required',
+            'pur_rate' => 'required',
+            'sales_rate' => 'required',
+            'open_qnty' => 'required',
+            'item_rate' => 'required',
+        ]);
+        if($validator->passes()){
+        try {
+
+            $sql = DB::select("Select UDF_GET_ORG_SCHEMA(?) as db;",[$request->org_id]);
+            if(!$sql){
+              throw new Exception;
+            }
+            $org_schema = $sql[0]->db;
+            $db = Config::get('database.connections.mysql');
+            $db['database'] = $org_schema;
+            config()->set('database.connections.wax', $db);
+            DB::connection('wax')->beginTransaction();
+            $sql = DB::connection('wax')->statement("Call USP_ADD_EDIT_ITEM(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,@error,@message);",[$request->item_id,$request->open_date,$request->cat_id,$request->item_mod,$request->item_size,$request->item_color,$request->item_name,$request->item_sh_name,$request->item_unit,$request->pur_ledg,$request->sales_ledg,$request->cgst,$request->sgst,$request->igst,$request->pur_rate,$request->sales_rate,$request->open_qnty,$request->item_rate,auth()->user()->Id,2]);
+
+            if(!$sql){
+                throw new Exception('Operation Error Found !!');
+            }
+            $result = DB::connection('wax')->select("Select @error As Error_No,@message As Message;");
+            $error_No = $result[0]->Error_No;
+            $message = $result[0]->Message;
+
+            if($error_No<0){
+                DB::connection('wax')->rollBack();
+                return response()->json([
+                    'message' => $message,
+                    'details' => null,
+                ],202);
+            }
+            else{
+                DB::connection('wax')->commit();
+                return response()->json([
+                    'message' => 'Item Successfully Updated !!',
+                    'details' => null,
+                ],200);
+            }
+            
+        } catch (Exception $ex) {
+            DB::connection('wax')->rollBack();
+            $response = response()->json([
+                'message' => $ex->getMessage(),
+                'details' => null,
+            ],400);
+
+            throw new HttpResponseException($response);
+        }
+    }
+    else{
+        $errors = $validator->errors();
+
+            $response = response()->json([
+                'message' => $errors->messages(),
+                'details' => null,
+            ],202);
+        
+            throw new HttpResponseException($response);
+    }
+    }
+
+    public function get_party_ledger(Int $org_id,Int $type){
+        try {
+            $sql = DB::select("Select UDF_GET_ORG_SCHEMA(?) as db;",[$org_id]);
+            if(!$sql){
+              throw new Exception;
+            }
+            $org_schema = $sql[0]->db;
+            $db = Config::get('database.connections.mysql');
+            $db['database'] = $org_schema;
+            config()->set('database.connections.wax', $db);
+            $head_id=0;
+            switch ($type) {
+                case 1:
+                    $head_id = 7;
+                    break;
+                case 2:
+                    $head_id = 10;
+                    break;
+                default:
+                    throw new Exception("Invalid type value");
+            }
+
+            $sql = DB::connection('wax')->select("Select Id,Ledger_Name From mst_org_acct_ledger Where Sub_Head=?;",[$head_id]);
+
+            if (empty($sql)) {
+                // Custom validation for no data found
+                return response()->json([
+                    'message' => 'No Data Found',
+                    'details' => null,
+                ], 202);
+            }
+
+            return response()->json([
+                'message' => 'Data Found',
+                'details' => $sql,
+            ],200);
+
+        } catch (Exception $ex) {
+            $response = response()->json([
+                'message' => 'Error Found',
+                'details' => $ex->getMessage(),
+            ],400);
+
+            throw new HttpResponseException($response);
+        } 
+    }
+
+    public function process_party(Request $request){
+        $validator = Validator::make($request->all(),[
+            'org_id' => 'required',
+            'party_type' => 'required',
+            'party_Name' => 'required',
+            'party_add' => 'required',
+            'party_mob' => 'required',
+            'under_ledger' => 'required',
+            'open_balance' => 'required',
+        ]);
+        if($validator->passes()){
+        try {
+
+            $sql = DB::select("Select UDF_GET_ORG_SCHEMA(?) as db;",[$request->org_id]);
+            if(!$sql){
+              throw new Exception;
+            }
+            $org_schema = $sql[0]->db;
+            $db = Config::get('database.connections.mysql');
+            $db['database'] = $org_schema;
+            config()->set('database.connections.wax', $db);
+            DB::connection('wax')->beginTransaction();
+            $sql = DB::connection('wax')->statement("Call USP_ADD_EDIT_PARTY(?,?,?,?,?,?,?,?,?,?,?,@error,@message);",[null,$request->party_type,$request->party_Name,$request->party_add,$request->party_mob,$request->party_mail,$request->party_gst,$request->under_ledger,$request->open_balance,auth()->user()->Id,1]);
+
+            if(!$sql){
+                throw new Exception('Operation Error Found !!');
+            }
+            $result = DB::connection('wax')->select("Select @error As Error_No,@message As Message;");
+            $error_No = $result[0]->Error_No;
+            $message = $result[0]->Message;
+
+            if($error_No<0){
+                DB::connection('wax')->rollBack();
+                return response()->json([
+                    'message' => $message,
+                    'details' => null,
+                ],202);
+            }
+            else{
+                DB::connection('wax')->commit();
+                return response()->json([
+                    'message' => 'Party Successfully Added !!',
+                    'details' => null,
+                ],200);
+            }
+            
+        } catch (Exception $ex) {
+            DB::connection('wax')->rollBack();
+            $response = response()->json([
+                'message' => $ex->getMessage(),
+                'details' => null,
+            ],400);
+
+            throw new HttpResponseException($response);
+        }
+    }
+    else{
+        $errors = $validator->errors();
+
+            $response = response()->json([
+                'message' => $errors->messages(),
+                'details' => null,
+            ],202);
+        
+            throw new HttpResponseException($response);
+    }
+    }
+
+    public function get_party_list(Int $org_id){
+        try {
+            $sql = DB::select("Select UDF_GET_ORG_SCHEMA(?) as db;",[$org_id]);
+            if(!$sql){
+              throw new Exception;
+            }
+            $org_schema = $sql[0]->db;
+            $db = Config::get('database.connections.mysql');
+            $db['database'] = $org_schema;
+            config()->set('database.connections.wax', $db);
+
+            $sql = DB::connection('wax')->select("Select Id,Case When Party_Type=1 Then 'Debtor' When Party_Type=2 Then 'Creditor' End As Party_Tp,Party_Type,Party_Name,Party_Add,Party_Mob,Party_Mail,Party_Gst,Ledger_Id,Open_Bal From mst_party_master;");
+
+            if (empty($sql)) {
+                // Custom validation for no data found
+                return response()->json([
+                    'message' => 'No Data Found',
+                    'details' => null,
+                ], 202);
+            }
+
+            return response()->json([
+                'message' => 'Data Found',
+                'details' => $sql,
+            ],200);
+
+        } catch (Exception $ex) {
+            $response = response()->json([
+                'message' => 'Error Found',
+                'details' => $ex->getMessage(),
+            ],400);
+
+            throw new HttpResponseException($response);
+        } 
+    }
+
+    public function update_party(Request $request){
+        $validator = Validator::make($request->all(),[
+            'org_id' => 'required',
+            'party_id' => 'required', 
+            'party_type' => 'required',
+            'party_Name' => 'required',
+            'party_add' => 'required',
+            'party_mob' => 'required',
+            'under_ledger' => 'required',
+            'open_balance' => 'required',
+        ]);
+        if($validator->passes()){
+        try {
+
+            $sql = DB::select("Select UDF_GET_ORG_SCHEMA(?) as db;",[$request->org_id]);
+            if(!$sql){
+              throw new Exception;
+            }
+            $org_schema = $sql[0]->db;
+            $db = Config::get('database.connections.mysql');
+            $db['database'] = $org_schema;
+            config()->set('database.connections.wax', $db);
+            DB::connection('wax')->beginTransaction();
+            $sql = DB::connection('wax')->statement("Call USP_ADD_EDIT_PARTY(?,?,?,?,?,?,?,?,?,?,?,@error,@message);",[$request->party_id,$request->party_type,$request->party_Name,$request->party_add,$request->party_mob,$request->party_mail,$request->party_gst,$request->under_ledger,$request->open_balance,auth()->user()->Id,2]);
+
+            if(!$sql){
+                throw new Exception('Operation Error Found !!');
+            }
+            $result = DB::connection('wax')->select("Select @error As Error_No,@message As Message;");
+            $error_No = $result[0]->Error_No;
+            $message = $result[0]->Message;
+
+            if($error_No<0){
+                DB::connection('wax')->rollBack();
+                return response()->json([
+                    'message' => $message,
+                    'details' => null,
+                ],202);
+            }
+            else{
+                DB::connection('wax')->commit();
+                return response()->json([
+                    'message' => 'Party Successfully Updated !!',
+                    'details' => null,
+                ],200);
+            }
+            
+        } catch (Exception $ex) {
+            DB::connection('wax')->rollBack();
+            $response = response()->json([
+                'message' => $ex->getMessage(),
+                'details' => null,
+            ],400);
+
+            throw new HttpResponseException($response);
+        }
+    }
+    else{
+        $errors = $validator->errors();
+
+            $response = response()->json([
+                'message' => $errors->messages(),
+                'details' => null,
+            ],202);
+        
+            throw new HttpResponseException($response);
+    }
+    }
+
+    public function process_design(Request $request){
+        $validator = Validator::make($request->all(),[
+            'org_id' =>'required',
+            'design_name' => 'required',
+            'design_no' => 'required',
+            'wt' => 'required',
+            'polish' => 'required',
+            'design_array' => 'required',
+        ]);
+        if($validator->passes()){
+            try {
+
+                DB::beginTransaction();
+
+                $design_details = $this->convertToObject($request->design_array);
+                $drop_table = DB::statement("Drop Temporary Table If Exists tempdetails;");
+                $create_tabl = DB::statement("Create Temporary Table tempdetails
+                                        (
+                                            Item_Id				Int,
+                                            Qnty                Int
+                                        );");
+                foreach ($design_details as $design_data) {
+                   DB::statement("Insert Into tempmodule (Item_Id,Qnty) Values (?);",[$design_data->item_id,$design_data->qnty]);
+                }
+
+                $sql = DB::statement("Call USP_ADD_EDIT_DESIGN(?,?,?,?,?,?,?,@error,@message);",[null,$request->design_name,$request->design_no,$request->wt,$request->polish,auth()->user()->Id,1]);
+
+                if(!$sql){
+                    throw new Exception;
+                }
+                $result = DB::connection('wax')->select("Select @error As Error_No,@message As Message;");
+                $error_No = $result[0]->Error_No;
+                $message = $result[0]->Message;
+    
+                if($error_No<0){
+                    DB::connection('wax')->rollBack();
+                    return response()->json([
+                        'message' => $message,
+                        'details' => null,
+                    ],202);
+                }
+                else{
+                    DB::connection('wax')->commit();
+                    return response()->json([
+                        'message' => 'Design Successfully Added !!',
+                        'details' => null,
+                    ],200);
+                }
+
+            } catch (Exception $ex) {
+                DB::rollBack(); 
+                $response = response()->json([
+                    'message' => $ex->getMessage(),
+                    'details' => null,
+                ],400);
+    
+                throw new HttpResponseException($response);
+            }
+        }
+        else{
+            $errors = $validator->errors();
+
+            $response = response()->json([
+              'message' => $errors->messages(),
+              'details' => null,
+          ],202);
+      
+          throw new HttpResponseException($response);
+        }
+    }
+
+    public function get_design_list(Int $org_id){
+        try {
+            $sql = DB::select("Select UDF_GET_ORG_SCHEMA(?) as db;",[$org_id]);
+            if(!$sql){
+              throw new Exception;
+            }
+            $org_schema = $sql[0]->db;
+            $db = Config::get('database.connections.mysql');
+            $db['database'] = $org_schema;
+            config()->set('database.connections.wax', $db);
+
+            $sql = DB::connection('wax')->select("Select m.Id,m.Design_Name,m.Design_No,m.WT,m.Polish,d.Item_Id,d.Qnty,i.Item_Name,i.Item_Sh_Name From mst_design_master m Join mst_design_details d On d.Design_Id=m.Id Join mst_item_master i On i.Id=d.Item_Id;");
+
+            if (empty($sql)) {
+                // Custom validation for no data found
+                return response()->json([
+                    'message' => 'No Data Found',
+                    'details' => null,
+                ], 202);
+            }
+
+            return response()->json([
+                'message' => 'Data Found',
+                'details' => $sql,
+            ],200);
+
+        } catch (Exception $ex) {
+            $response = response()->json([
+                'message' => 'Error Found',
+                'details' => $ex->getMessage(),
+            ],400);
+
+            throw new HttpResponseException($response);
+        } 
+    }
+
+    public function get_cat_item_list(Int $org_id,Int $cat_id){
+        try {
+            $sql = DB::select("Select UDF_GET_ORG_SCHEMA(?) as db;",[$org_id]);
+            if(!$sql){
+              throw new Exception;
+            }
+            $org_schema = $sql[0]->db;
+            $db = Config::get('database.connections.mysql');
+            $db['database'] = $org_schema;
+            config()->set('database.connections.wax', $db);
+
+            $sql = DB::connection('wax')->select("Select Id,Item_Name From mst_item_master Where Cat_Id=?;",[$cat_id]);
+
+            if (empty($sql)) {
+                // Custom validation for no data found
+                return response()->json([
+                    'message' => 'No Data Found',
+                    'details' => null,
+                ], 202);
+            }
+
+            return response()->json([
+                'message' => 'Data Found',
+                'details' => $sql,
+            ],200);
+
+        } catch (Exception $ex) {
+            $response = response()->json([
+                'message' => 'Error Found',
+                'details' => $ex->getMessage(),
+            ],400);
+
+            throw new HttpResponseException($response);
+        } 
+    }
+
+    public function update_design(Request $request){
+        $validator = Validator::make($request->all(),[
+            'org_id' =>'required',
+            'design_id' => 'required',
+            'design_name' => 'required',
+            'design_no' => 'required',
+            'wt' => 'required',
+            'polish' => 'required',
+            'design_array' => 'required',
+        ]);
+        if($validator->passes()){
+            try {
+
+                DB::beginTransaction();
+
+                $design_details = $this->convertToObject($request->design_array);
+                $drop_table = DB::statement("Drop Temporary Table If Exists tempdetails;");
+                $create_tabl = DB::statement("Create Temporary Table tempdetails
+                                        (
+                                            Item_Id				Int,
+                                            Qnty                Int
+                                        );");
+                foreach ($design_details as $design_data) {
+                   DB::statement("Insert Into tempmodule (Item_Id,Qnty) Values (?);",[$design_data->item_id,$design_data->qnty]);
+                }
+
+                $sql = DB::statement("Call USP_ADD_EDIT_DESIGN(?,?,?,?,?,?,?,@error,@message);",[$request->design_id,$request->design_name,$request->design_no,$request->wt,$request->polish,auth()->user()->Id,2]);
+
+                if(!$sql){
+                    throw new Exception;
+                }
+                $result = DB::connection('wax')->select("Select @error As Error_No,@message As Message;");
+                $error_No = $result[0]->Error_No;
+                $message = $result[0]->Message;
+    
+                if($error_No<0){
+                    DB::connection('wax')->rollBack();
+                    return response()->json([
+                        'message' => $message,
+                        'details' => null,
+                    ],202);
+                }
+                else{
+                    DB::connection('wax')->commit();
+                    return response()->json([
+                        'message' => 'Design Successfully Updated !!',
+                        'details' => null,
+                    ],200);
+                }
+
+            } catch (Exception $ex) {
+                DB::rollBack(); 
+                $response = response()->json([
+                    'message' => $ex->getMessage(),
+                    'details' => null,
+                ],400);
+    
+                throw new HttpResponseException($response);
+            }
+        }
+        else{
+            $errors = $validator->errors();
+
+            $response = response()->json([
+              'message' => $errors->messages(),
+              'details' => null,
+          ],202);
+      
+          throw new HttpResponseException($response);
+        }
     }
 }

@@ -99,6 +99,27 @@ Route::group([
     Route::post('/Org/Master/AddSizeColor',[ProcessMaster::class,'process_size_color']);
     Route::get('/Org/Master/GetSizeColor/{org_id}',[ProcessMaster::class,'get_size_color_list']);
     Route::put('/Org/Master/UpdateSizeColor',[ProcessMaster::class,'update_size_color']);
+    Route::get('/Org/Master/GetSizeWiseColor/{org_id}/{size_id}',[ProcessMaster::class,'get_size_wise_color']);
+    Route::get('/Org/Master/GetAcctMainHead/{org_id}',[ProcessMaster::class,'get_account_head']);
+    Route::post('/Org/Master/AddAccountHead',[ProcessMaster::class,'process_acct_head']);
+    Route::get('/Org/Master/GetAccountHead/{org_id}',[ProcessMaster::class,'get_acct_head_list']);
+    Route::put('/Org/Master/UpdateAccountHead',[ProcessMaster::class,'update_acct_head']);
+    Route::post('/Org/Master/AddAccountLedger',[ProcessMaster::class,'process_acct_ledger']);
+    Route::get('/Org/Master/GetAccountLedger/{org_id}',[ProcessMaster::class,'get_acct_ledger_list']);
+    Route::put('/Org/Master/UpdateAccountLedger',[ProcessMaster::class,'update_acct_ledger']);
+    Route::get('/Org/Master/GetPurchaseLedger/{org_id}',[ProcessMaster::class,'get_purchase_ledger']);
+    Route::get('/Org/Master/GetSalesLedger/{org_id}',[ProcessMaster::class,'get_sales_ledger']);
+    Route::post('/Org/Master/AddItem',[ProcessMaster::class,'process_item']);
+    Route::get('/Org/Master/GetItem/{org_id}',[ProcessMaster::class,'get_item_list']);
+    Route::put('/Org/Master/UpdateItem',[ProcessMaster::class,'update_item']);
+    Route::get('/Org/Master/GetPartyLedger/{org_id}/{type}',[ProcessMaster::class,'get_party_ledger']);
+    Route::post('/Org/Master/AddParty',[ProcessMaster::class,'process_party']);
+    Route::get('/Org/Master/GetPartyList/{org_id}',[ProcessMaster::class,'get_party_list']);
+    Route::put('/Org/Master/UpdateParty',[ProcessMaster::class,'update_party']);
+    Route::post('/Org/Master/AddDesign',[ProcessMaster::class,'process_design']);
+    Route::get('/Org/Master/GetDesign/{org_id}',[ProcessMaster::class,'get_design_list']);
+    Route::get('/Org/Master/GetCatItem/{org_id}/{cat_id}',[ProcessMaster::class,'get_cat_item_list']);
+    Route::put('/Org/Master/UpdateDesign',[ProcessMaster::class,'update_design']);
 
     // End Master Route
 
