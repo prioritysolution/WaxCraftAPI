@@ -14,6 +14,7 @@ use App\Http\Controllers\Admin\ProcessOrganisation;
 
 use App\Http\Controllers\Organisation\ProcessUserLogin;
 use App\Http\Controllers\Organisation\ProcessMaster;
+use App\Http\Controllers\Organisation\ProcessInventory;
 
 // User Controller End
 
@@ -120,8 +121,20 @@ Route::group([
     Route::get('/Org/Master/GetDesign/{org_id}',[ProcessMaster::class,'get_design_list']);
     Route::get('/Org/Master/GetCatItem/{org_id}/{cat_id}',[ProcessMaster::class,'get_cat_item_list']);
     Route::put('/Org/Master/UpdateDesign',[ProcessMaster::class,'update_design']);
+    Route::post('/Org/Master/AddEmployee',[ProcessMaster::class,'process_employee']);
+    Route::get('/Org/Master/GetEmployeeList/{org_id}',[ProcessMaster::class,'get_emp_list']);
+    Route::put('/Org/Master/UpdateEmployee',[ProcessMaster::class,'update_employee']);
 
     // End Master Route
+
+    // Inventory Voucher Route Start
+
+    Route::get('/Org/ProcessInventory/GetOrderParty/{org_id}',[ProcessInventory::class,'get_debtor_list']);
+    Route::get('/Org/ProcessInventory/GetOrderDesign/{org_id}',[ProcessInventory::class,'get_order_design']);
+    Route::get('/Org/ProcessInventory/GetDesignDetails/{org_id}/{design_id}',[ProcessInventory::class,'get_design_details']);
+    Route::post('/Org/ProcessInventory/PostOrder',[ProcessInventory::class,'process_order']);
+
+    // Inventory Voucher Route End
 
 });
 
