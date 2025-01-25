@@ -134,7 +134,7 @@ Route::group([
     Route::get('/Org/ProcessInventory/GetDesignDetails/{org_id}/{design_id}',[ProcessInventory::class,'get_design_details']);
     Route::post('/Org/ProcessInventory/PostOrder',[ProcessInventory::class,'process_order']);
     Route::get('/Org/ProcessInventory/GetActiveOrder/{org_id}',[ProcessInventory::class,'get_active_order_list']);
-    Route::put('/Org/ProcessInventory/EditOrder',[ProcessInventory::class,'update_order']);
+    Route::put('/Org/ProcessInventory/CancelOrder',[ProcessInventory::class,'cancle_order']);
     Route::get('/Org/ProcessInventory/GetWorkStatus/{org_id}/{order_id}',[ProcessInventory::class,'get_work_status']);
     Route::post('/Org/ProcessInventory/ProcessOrder',[ProcessInventory::class,'process_work_order']);
     Route::get('/Org/ProcessInventory/GetInvoiseOrder/{org_id}',[ProcessInventory::class,'get_complete_order_list']);

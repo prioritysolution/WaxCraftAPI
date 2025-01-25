@@ -366,14 +366,10 @@ class ProcessInventory extends Controller
         
     }
 
-    public function update_order(Request $request){
+    public function cancle_order(Request $request){
         $validator = Validator::make($request->all(),[
             'org_id' =>'required',
             'order_id' => 'required',
-            'ord_date' => 'required',
-            'party_id' => 'required',
-            'tot_amt' => 'required',
-            'year_id' => 'required',
         ]);
         if($validator->passes()){
             try {
@@ -388,27 +384,8 @@ class ProcessInventory extends Controller
                 config()->set('database.connections.wax', $db);
                 DB::connection('wax')->beginTransaction();
 
-                $order_details = $this->convertToObject($request->order_array);
-                $drop_table = DB::connection('wax')->statement("Drop Temporary Table If Exists temporddetails;");
-                $create_tabl = DB::connection('wax')->statement("Create Temporary Table temporddetails
-                                                                (
-                                                                    Design_Id		Int,
-                                                                    Qnty			Numeric(18,2),
-                                                                    Qnty_Rate       Numeric(18,2),
-                                                                    Wt_Rate			Numeric(18,2),
-                                                                    Tot_Wt			Numeric(18,2),
-                                                                    Polish_Rate		Numeric(18,2),
-                                                                    Tot_Polish		Numeric(18,2),
-                                                                    Item_Id			Int,
-                                                                    Item_Qnty		Numeric(18,2),
-                                                                    Item_Rate		Numeric(18,2),
-                                                                    Item_Tot		Numeric(18,2)
-                                                                );");
-                foreach ($order_details as $order_data) {
-                   DB::connection('wax')->statement("Insert Into temporddetails (Design_Id,Qnty,Qnty_Rate,Wt_Rate,Tot_Wt,Polish_Rate,Tot_Polish,Item_Id,Item_Qnty,Item_Rate,Item_Tot) Values (?,?,?,?,?,?,?,?,?,?,?);",[$order_data->design_id,$order_data->qnty,$order_data->qnty_rate,$order_data->wt_rate,$order_data->tot_wt,$order_data->polish_rate,$order_data->tot_polish,$order_data->item_id,$order_data->item_qnty,$order_data->item_rate,$order_data->item_tot]);
-                }
-
-                $sql = DB::connection('wax')->statement("Call USP_ADD_EDIT_ORDER(?,?,?,?,?,?,?,@error,@message);",[$request->order_id,$request->ord_date,$request->party_id,$request->tot_amt,$request->year_id,auth()->user()->Id,2]);
+                
+                $sql = DB::connection('wax')->statement("Call USP_ADD_EDIT_ORDER(?,?,?,?,?,?,?,@error,@message);",[$request->order_id,null,null,null,null,auth()->user()->Id,2]);
 
                 if(!$sql){
                     throw new Exception;
@@ -427,7 +404,7 @@ class ProcessInventory extends Controller
                 else{
                     DB::connection('wax')->commit();
                     return response()->json([
-                        'message' => 'Order Details Successfully Updated !!',
+                        'message' => 'Order Cancled Successfully !!',
                         'details' => null,
                     ],200);
                 }
@@ -541,7 +518,7 @@ class ProcessInventory extends Controller
                                                                     Work_Under		Int
                                                                 );");
                 foreach ($order_details as $order_data) {
-                   DB::connection('wax')->statement("Insert Into temporddetails (Design_Id,Work_Details,Start_Date,Work_Under) Values (?,?,?,?);",[$order_data->design_id,$order_data->work_details,$order_data->start_date,$order_data->work_under]);
+                   DB::connection('wax')->statement("Insert Into tempdetails (Design_Id,Work_Details,Start_Date,Work_Under) Values (?,?,?,?);",[$order_data->design_id,$order_data->work_details,$order_data->start_date,$order_data->work_under]);
                 }
 
                 $sql = DB::connection('wax')->statement("Call USP_PROCESS_ORDER(?,?,@error,@message);",[$request->order_id,auth()->user()->Id]);
