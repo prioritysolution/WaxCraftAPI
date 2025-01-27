@@ -124,6 +124,10 @@ Route::group([
     Route::post('/Org/Master/AddEmployee',[ProcessMaster::class,'process_employee']);
     Route::get('/Org/Master/GetEmployeeList/{org_id}',[ProcessMaster::class,'get_emp_list']);
     Route::put('/Org/Master/UpdateEmployee',[ProcessMaster::class,'update_employee']);
+    Route::get('/Org/Master/GetBankLedger/{org_id}',[ProcessMaster::class,'get_bank_ledger']);
+    Route::post('/Org/Master/AddBankAccount',[ProcessMaster::class,'process_bank_Account']);
+    Route::get('/Org/Master/GetBankAccount/{org_id}',[ProcessMaster::class,'get_bank_acct_list']);
+    Route::put('/Org/Master/UpdateBankAccount',[ProcessMaster::class,'update_bank_account']);
 
     // End Master Route
 
@@ -137,7 +141,8 @@ Route::group([
     Route::put('/Org/ProcessInventory/CancelOrder',[ProcessInventory::class,'cancle_order']);
     Route::get('/Org/ProcessInventory/GetWorkStatus/{org_id}/{order_id}',[ProcessInventory::class,'get_work_status']);
     Route::post('/Org/ProcessInventory/ProcessOrder',[ProcessInventory::class,'process_work_order']);
-    Route::get('/Org/ProcessInventory/GetInvoiseOrder/{org_id}',[ProcessInventory::class,'get_complete_order_list']);
+    Route::get('/Org/ProcessInventory/GetInvoiseOrder/{org_id}/{party_id}',[ProcessInventory::class,'get_complete_order_list']);
+    Route::put('/Org/ProcessInventory/FinalOrderProcess',[ProcessInventory::class,'process_final_process']);
     // Inventory Voucher Route End
 
 });

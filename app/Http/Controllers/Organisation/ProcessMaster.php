@@ -2239,4 +2239,213 @@ class ProcessMaster extends Controller
             throw new HttpResponseException($response);
     }
     }
+
+    public function get_bank_ledger(Int $org_id){
+        try {
+            $sql = DB::select("Select UDF_GET_ORG_SCHEMA(?) as db;",[$org_id]);
+            if(!$sql){
+              throw new Exception;
+            }
+            $org_schema = $sql[0]->db;
+            $db = Config::get('database.connections.mysql');
+            $db['database'] = $org_schema;
+            config()->set('database.connections.wax', $db);
+
+            $sql = DB::connection('wax')->select("Select Id,Ledger_Name From mst_org_acct_ledger Where Sub_Head=2;");
+
+            if (empty($sql)) {
+                // Custom validation for no data found
+                return response()->json([
+                    'message' => 'No Data Found',
+                    'details' => null,
+                ], 202);
+            }
+
+            return response()->json([
+                'message' => 'Data Found',
+                'details' => $sql,
+            ],200);
+
+        } catch (Exception $ex) {
+            $response = response()->json([
+                'message' => 'Error Found',
+                'details' => $ex->getMessage(),
+            ],400);
+
+            throw new HttpResponseException($response);
+        } 
+    }
+
+    public function process_bank_Account(Request $request){
+        $validator = Validator::make($request->all(),[
+            'org_id' => 'required',
+            'bank_name' => 'required',
+            'branch_Name' => 'required',
+            'bank_ifsc' => 'required',
+            'account_no' => 'required',
+            'ledger_id' => 'required',
+            'opening_date' => 'required',
+        ]);
+        if($validator->passes()){
+        try {
+
+            $sql = DB::select("Select UDF_GET_ORG_SCHEMA(?) as db;",[$request->org_id]);
+            if(!$sql){
+              throw new Exception;
+            }
+            $org_schema = $sql[0]->db;
+            $db = Config::get('database.connections.mysql');
+            $db['database'] = $org_schema;
+            config()->set('database.connections.wax', $db);
+            DB::connection('wax')->beginTransaction();
+            $sql = DB::connection('wax')->statement("Call USP_ADD_EDIT_BANK_ACCOUNT(?,?,?,?,?,?,?,?,?,?,@error,@message);",[null,$request->bank_name,$request->branch_Name,$request->bank_ifsc,$request->account_no,$request->ledger_id,$request->opening_date,$request->open_banalce,auth()->user()->Id,1]);
+
+            if(!$sql){
+                throw new Exception('Operation Error Found !!');
+            }
+            $result = DB::connection('wax')->select("Select @error As Error_No,@message As Message;");
+            $error_No = $result[0]->Error_No;
+            $message = $result[0]->Message;
+
+            if($error_No<0){
+                DB::connection('wax')->rollBack();
+                return response()->json([
+                    'message' => $message,
+                    'details' => null,
+                ],202);
+            }
+            else{
+                DB::connection('wax')->commit();
+                return response()->json([
+                    'message' => 'Bank Account Successfully Added !!',
+                    'details' => null,
+                ],200);
+            }
+            
+        } catch (Exception $ex) {
+            DB::connection('wax')->rollBack();
+            $response = response()->json([
+                'message' => $ex->getMessage(),
+                'details' => null,
+            ],400);
+
+            throw new HttpResponseException($response);
+        }
+    }
+    else{
+        $errors = $validator->errors();
+
+            $response = response()->json([
+                'message' => $errors->messages(),
+                'details' => null,
+            ],202);
+        
+            throw new HttpResponseException($response);
+    }
+    }
+
+    public function get_bank_acct_list(Int $org_id){
+        try {
+            $sql = DB::select("Select UDF_GET_ORG_SCHEMA(?) as db;",[$org_id]);
+            if(!$sql){
+              throw new Exception;
+            }
+            $org_schema = $sql[0]->db;
+            $db = Config::get('database.connections.mysql');
+            $db['database'] = $org_schema;
+            config()->set('database.connections.wax', $db);
+
+            $sql = DB::connection('wax')->select("Select Id,Bank_Name,Branch_Name,Bank_IFSC,Account_No,Under_Ledger,Opening_Date,Opening_Balance From mst_bank_account;");
+
+            if (empty($sql)) {
+                // Custom validation for no data found
+                return response()->json([
+                    'message' => 'No Data Found',
+                    'details' => null,
+                ], 202);
+            }
+
+            return response()->json([
+                'message' => 'Data Found',
+                'details' => $sql,
+            ],200);
+
+        } catch (Exception $ex) {
+            $response = response()->json([
+                'message' => 'Error Found',
+                'details' => $ex->getMessage(),
+            ],400);
+
+            throw new HttpResponseException($response);
+        } 
+    }
+
+    public function update_bank_account(Request $request){
+        $validator = Validator::make($request->all(),[
+            'org_id' => 'required',
+            'bank_id' => 'required',
+            'bank_name' => 'required',
+            'branch_Name' => 'required',
+            'bank_ifsc' => 'required',
+            'account_no' => 'required',
+            'ledger_id' => 'required',
+            'opening_date' => 'required',
+        ]);
+        if($validator->passes()){
+        try {
+
+            $sql = DB::select("Select UDF_GET_ORG_SCHEMA(?) as db;",[$request->org_id]);
+            if(!$sql){
+              throw new Exception;
+            }
+            $org_schema = $sql[0]->db;
+            $db = Config::get('database.connections.mysql');
+            $db['database'] = $org_schema;
+            config()->set('database.connections.wax', $db);
+            DB::connection('wax')->beginTransaction();
+            $sql = DB::connection('wax')->statement("Call USP_ADD_EDIT_BANK_ACCOUNT(?,?,?,?,?,?,?,?,?,?,@error,@message);",[$request->bank_id,$request->bank_name,$request->branch_Name,$request->bank_ifsc,$request->account_no,$request->ledger_id,$request->opening_date,$request->open_banalce,auth()->user()->Id,2]);
+
+            if(!$sql){
+                throw new Exception('Operation Error Found !!');
+            }
+            $result = DB::connection('wax')->select("Select @error As Error_No,@message As Message;");
+            $error_No = $result[0]->Error_No;
+            $message = $result[0]->Message;
+
+            if($error_No<0){
+                DB::connection('wax')->rollBack();
+                return response()->json([
+                    'message' => $message,
+                    'details' => null,
+                ],202);
+            }
+            else{
+                DB::connection('wax')->commit();
+                return response()->json([
+                    'message' => 'Bank Account Successfully Updated !!',
+                    'details' => null,
+                ],200);
+            }
+            
+        } catch (Exception $ex) {
+            DB::connection('wax')->rollBack();
+            $response = response()->json([
+                'message' => $ex->getMessage(),
+                'details' => null,
+            ],400);
+
+            throw new HttpResponseException($response);
+        }
+    }
+    else{
+        $errors = $validator->errors();
+
+            $response = response()->json([
+                'message' => $errors->messages(),
+                'details' => null,
+            ],202);
+        
+            throw new HttpResponseException($response);
+    }
+    }
 }

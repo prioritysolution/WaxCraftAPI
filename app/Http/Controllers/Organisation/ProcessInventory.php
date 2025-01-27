@@ -521,7 +521,7 @@ class ProcessInventory extends Controller
                    DB::connection('wax')->statement("Insert Into tempdetails (Design_Id,Work_Details,Start_Date,Work_Under) Values (?,?,?,?);",[$order_data->design_id,$order_data->work_details,$order_data->start_date,$order_data->work_under]);
                 }
 
-                $sql = DB::connection('wax')->statement("Call USP_PROCESS_ORDER(?,?,@error,@message);",[$request->order_id,auth()->user()->Id]);
+                $sql = DB::connection('wax')->statement("Call USP_PROCESS_ORDER(?,?,?,?,@error,@message);",[$request->order_id,auth()->user()->Id,null,1]);
 
                 if(!$sql){
                     throw new Exception;
@@ -567,7 +567,7 @@ class ProcessInventory extends Controller
         }
     }
 
-    public function get_complete_order_list(Int $org_id){
+    public function get_complete_order_list(Int $org_id,Int $party_id){
         try {
             $sql = DB::select("Select UDF_GET_ORG_SCHEMA(?) as db;", [$org_id]);
             if (!$sql) {
@@ -609,7 +609,7 @@ class ProcessInventory extends Controller
             JOIN 
                 mst_order_item_details i ON i.Order_Id = m.Id AND i.Design_Id = d.Design_Id
             WHERE 
-                m.Is_Invoise = 0 And (Select Count(*) From mst_order_status Where Order_Id=m.Id And Is_Complete=1)<>0;
+                m.Is_Invoise = 0 And m.Party_Id=$party_id And (Select Count(*) From mst_order_status Where Order_Id=m.Id And Is_Complete=1)<>0;
             ");
         
             if (empty($sql)) {
@@ -683,5 +683,69 @@ class ProcessInventory extends Controller
         
             throw new HttpResponseException($response);
         }
+    }
+
+    public function process_final_process(Request $request){
+        $validator = Validator::make($request->all(),[
+            'org_id' => 'required',
+            'order_id' => 'required',
+            'comp_date' => 'required'
+        ]);
+        if($validator->passes()){
+        try {
+
+            $sql = DB::select("Select UDF_GET_ORG_SCHEMA(?) as db;",[$request->org_id]);
+            if(!$sql){
+              throw new Exception;
+            }
+            $org_schema = $sql[0]->db;
+            $db = Config::get('database.connections.mysql');
+            $db['database'] = $org_schema;
+            config()->set('database.connections.wax', $db);
+            DB::connection('wax')->beginTransaction();
+            $sql = DB::connection('wax')->statement("Call USP_PROCESS_ORDER(?,?,?,?,@error,@message);",[$request->order_id,auth()->user()->Id,$request->comp_date,2]);
+
+            if(!$sql){
+                throw new Exception('Operation Error Found !!');
+            }
+            $result = DB::connection('wax')->select("Select @error As Error_No,@message As Message;");
+            $error_No = $result[0]->Error_No;
+            $message = $result[0]->Message;
+
+            if($error_No<0){
+                DB::connection('wax')->rollBack();
+                return response()->json([
+                    'message' => $message,
+                    'details' => null,
+                ],202);
+            }
+            else{
+                DB::connection('wax')->commit();
+                return response()->json([
+                    'message' => 'Order Is Final Processed Successfully !!',
+                    'details' => null,
+                ],200);
+            }
+            
+        } catch (Exception $ex) {
+            DB::connection('wax')->rollBack();
+            $response = response()->json([
+                'message' => $ex->getMessage(),
+                'details' => null,
+            ],400);
+
+            throw new HttpResponseException($response);
+        }
+    }
+    else{
+        $errors = $validator->errors();
+
+            $response = response()->json([
+                'message' => $errors->messages(),
+                'details' => null,
+            ],202);
+        
+            throw new HttpResponseException($response);
+    }
     }
 }
