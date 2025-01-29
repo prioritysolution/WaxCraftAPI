@@ -194,7 +194,7 @@ class ProcessInventory extends Controller
                                                                     Tot_Polish		Numeric(18,2),
                                                                     Item_Id			Int,
                                                                     Item_Qnty		Numeric(18,2),
-                                                                    Item_Rate		Numeric(18,2),
+                                                                    Item_Rate		Numeric(18,3),
                                                                     Item_Tot		Numeric(18,2)
                                                                 );");
                 foreach ($order_details as $order_data) {
@@ -747,5 +747,371 @@ class ProcessInventory extends Controller
         
             throw new HttpResponseException($response);
     }
+    }
+
+    public function process_invoise(Request $request){
+        $validator = Validator::make($request->all(),[
+            'org_id' =>'required',
+            'sales_date' => 'required',
+            'party_id' => 'required',
+            'tot_amount' => 'required',
+            'gst_rate' => 'required',
+            'tot_cgst' => 'required',
+            'tot_sgst' => 'required',
+            'tot_igst' => 'required',
+            'tot_round' => 'required',
+            'tot_discount' => 'required',
+            'year_id' => 'required',
+            'invoise_data' => 'required'
+        ]);
+        if($validator->passes()){
+            try {
+
+                $sql = DB::select("Select UDF_GET_ORG_SCHEMA(?) as db;",[$request->org_id]);
+                if(!$sql){
+                throw new Exception;
+                }
+                $org_schema = $sql[0]->db;
+                $db = Config::get('database.connections.mysql');
+                $db['database'] = $org_schema;
+                config()->set('database.connections.wax', $db);
+                DB::connection('wax')->beginTransaction();
+
+                $order_details = $this->convertToObject($request->invoise_data);
+                $drop_table = DB::connection('wax')->statement("Drop Temporary Table If Exists temporddetails;");
+                $create_tabl = DB::connection('wax')->statement("Create Temporary Table temporddetails
+                                                                (
+                                                                    Order_Id		Int,
+                                                                    Design_Id		Int,
+                                                                    Qnty			Numeric(18,2),
+                                                                    Wt_Rate			Numeric(18,2),
+                                                                    Tot_Wt			Numeric(18,2),
+                                                                    Polish_Rate		Numeric(18,2),
+                                                                    Tot_Polish		Numeric(18,2),
+                                                                    Item_Id			Int,
+                                                                    Item_Qnty		Numeric(18,2),
+                                                                    Item_Rate		Numeric(18,3),
+                                                                    Item_Tot		Numeric(18,2)
+                                                                );");
+                foreach ($order_details as $order_data) {
+                   DB::connection('wax')->statement("Insert Into temporddetails (Order_Id,Design_Id,Qnty,Wt_Rate,Tot_Wt,Polish_Rate,Tot_Polish,Item_Id,Item_Qnty,Item_Rate,Item_Tot) Values (?,?,?,?,?,?,?,?,?,?,?);",[$order_data->order_id,$order_data->design_id,$order_data->qnty,$order_data->wt_rate,$order_data->tot_wt,$order_data->polish_rate,$order_data->tot_polish,$order_data->item_id,$order_data->item_qnty,$order_data->item_rate,$order_data->item_tot]);
+                }
+
+                $sql = DB::connection('wax')->statement("Call USP_ADD_EDIT_SALE(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,@error,@message,@sale_id);",[null,$request->sales_date,$request->party_id,$request->tot_amount,$request->gst_rate,$request->tot_cgst,$request->tot_sgst,$request->tot_igst,$request->tot_round,$request->tot_discount,$request->year_id,$request->bank_id,$request->is_credit,auth()->user()->Id,1]);
+
+                if(!$sql){
+                    throw new Exception;
+                }
+                $result = DB::connection('wax')->select("Select @error As Error_No,@message As Message,@sale_id As Sales_Id;");
+                $error_No = $result[0]->Error_No;
+                $message = $result[0]->Message;
+                $sales_Id = $result[0]->Sales_Id;
+    
+                if($error_No<0){
+                    DB::connection('wax')->rollBack();
+                    return response()->json([
+                        'message' => $message,
+                        'details' => null,
+                    ],202);
+                }
+                else{
+                    DB::connection('wax')->commit();
+                    return response()->json([
+                        'message' => $message,
+                        'details' => $sales_Id,
+                    ],200);
+                }
+
+            } catch (Exception $ex) {
+                DB::rollBack(); 
+                $response = response()->json([
+                    'message' => $ex->getMessage(),
+                    'details' => null,
+                ],400);
+    
+                throw new HttpResponseException($response);
+            }
+        }
+        else{
+            $errors = $validator->errors();
+
+            $response = response()->json([
+              'message' => $errors->messages(),
+              'details' => null,
+          ],202);
+      
+          throw new HttpResponseException($response);
+        }
+    }
+
+    public function cancel_invoise(Request $request){
+        $validator = Validator::make($request->all(),[
+            'org_id' => 'required',
+            'sales_id' => 'required',
+        ]);
+        if($validator->passes()){
+        try {
+
+            $sql = DB::select("Select UDF_GET_ORG_SCHEMA(?) as db;",[$request->org_id]);
+            if(!$sql){
+              throw new Exception;
+            }
+            $org_schema = $sql[0]->db;
+            $db = Config::get('database.connections.mysql');
+            $db['database'] = $org_schema;
+            config()->set('database.connections.wax', $db);
+            DB::connection('wax')->beginTransaction();
+            $sql = DB::connection('wax')->statement("Call USP_ADD_EDIT_SALE(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,@error,@message,@sale_id);",[$request->sales_id,null,null,null,null,null,null,null,null,null,null,null,null,auth()->user()->Id,2]);
+
+            if(!$sql){
+                throw new Exception('Operation Error Found !!');
+            }
+            $result = DB::connection('wax')->select("Select @error As Error_No,@message As Message;");
+            $error_No = $result[0]->Error_No;
+            $message = $result[0]->Message;
+
+            if($error_No<0){
+                DB::connection('wax')->rollBack();
+                return response()->json([
+                    'message' => $message,
+                    'details' => null,
+                ],202);
+            }
+            else{
+                DB::connection('wax')->commit();
+                return response()->json([
+                    'message' => 'Sales Invoise Successfully Cancled !!',
+                    'details' => null,
+                ],200);
+            }
+            
+        } catch (Exception $ex) {
+            DB::connection('wax')->rollBack();
+            $response = response()->json([
+                'message' => $ex->getMessage(),
+                'details' => null,
+            ],400);
+
+            throw new HttpResponseException($response);
+        }
+    }
+    else{
+        $errors = $validator->errors();
+
+            $response = response()->json([
+                'message' => $errors->messages(),
+                'details' => null,
+            ],202);
+        
+            throw new HttpResponseException($response);
+    }
+    }
+
+    public function process_print_invoise(Int $org_id,Int $sale_id){
+        try {
+            $sql = DB::select("Select UDF_GET_ORG_SCHEMA(?) as db;", [$org_id]);
+            if (!$sql) {
+                throw new Exception;
+            }
+            $org_schema = $sql[0]->db;
+            $db = Config::get('database.connections.mysql');
+            $db['database'] = $org_schema;
+            config()->set('database.connections.wax', $db);
+        
+            $sql = DB::connection('wax')->select("SELECT 
+                                m.Id,
+                                m.Sales_Date,
+                                m.Sales_No,
+                                p.Party_Name,
+                                p.Party_Add,
+                                p.Party_Mob,
+                                p.Party_Gst,
+                                m.Party_Id,
+                                m.Tot_Amount,
+                                m.Gst_Rate,
+                                m.Tot_CGST,
+                                m.Tot_SGST,
+                                m.Tot_IGST,
+                                m.Tot_Round,
+                                m.Tot_Discount,
+                                d.Design_Id,
+                                dn.Design_Name,
+                                dn.Design_No,
+                                d.Deg_Qnty,
+                                d.Wt_Rate,
+                                d.Tot_Wt,
+                                d.Polish_Rate,
+                                d.Tot_Polish,
+                                i.Item_Id,
+                                UDF_GET_ITEM_NAME(i.Item_Id) AS Item_Name,
+                                i.Item_Qnty,
+                                i.Item_Rate,
+                                i.Tot_Item
+                            FROM
+                                trn_sales_master m
+                                    JOIN
+                                trn_sales_details d ON d.Sales_Id = m.Id
+                                    JOIN
+                                mst_design_master dn ON dn.Id = d.Design_Id
+                                    JOIN
+                                trn_sales_item_details i ON i.Sales_Id = m.Id
+                                    AND i.Design_Id = d.Design_Id
+                                    JOIN
+                                mst_party_master p ON p.Id = m.Party_Id
+                            WHERE
+                                m.Id = ?;
+            ",[$sale_id]);
+        
+            if (empty($sql)) {
+                return response()->json([
+                    'message' => 'No Data Found',
+                    'details' => null,
+                ], 202);
+            }
+        
+            $menu_set = [];
+            
+            foreach ($sql as $row) {
+                // Initialize the main order structure
+                if (!isset($menu_set[$row->Id])) {
+                    $menu_set[$row->Id] = [
+                        'Id' => $row->Id,
+                        'Sale_Date' => $row->Sales_Date,
+                        'Sale_No' => $row->Sales_No,
+                        'Party_Name' => $row->Party_Name,
+                        'Party_Id' => $row->Party_Id,
+                        'Party_Add' => $row->Party_Add,
+                        'Party_Mob' => $row->Party_Mob,
+                        'Party_GST' => $row->Party_Gst,
+                        'Tot_Amount' => $row->Tot_Amount,
+                        'CGST_Rate' => ($row->Gst_Rate/2),
+                        'Tot_CGST' => $row->Tot_CGST,
+                        'SGST_Rate' => ($row->Gst_Rate/2),
+                        'Tot_SGST' => $row->Tot_SGST,
+                        'Tot_IGST' => $row->Tot_IGST,
+                        'Tot_Round' => $row->Tot_Round,
+                        'Tot_Disc' => $row->Tot_Discount,
+                        "DesignRow" => [],
+                    ];
+                }
+        
+                // Add design details to the order
+                if (!isset($menu_set[$row->Id]['DesignRow'][$row->Design_Id])) {
+                    $menu_set[$row->Id]['DesignRow'][$row->Design_Id] = [
+                        'Design_Id' => $row->Design_Id,
+                        'Design_Name' => $row->Design_Name,
+                        'Design_No' => $row->Design_No,
+                        'Order_Qnty' => $row->Deg_Qnty,
+                        'Wt' => $row->Wt_Rate,
+                        'Tot_Wt' => $row->Tot_Wt,
+                        'Polish' => $row->Polish_Rate,
+                        'Tot_Polish' => $row->Tot_Polish,
+                        'ItemRow' => []
+                    ];
+                }
+        
+                // Add item details to the corresponding design
+                if ($row->Item_Id) {
+                    $menu_set[$row->Id]['DesignRow'][$row->Design_Id]['ItemRow'][] = [
+                        'Item_Id' => $row->Item_Id,
+                        'Item_Name' => $row->Item_Name,
+                        'Item_Qnty' => $row->Item_Qnty,
+                        'Item_Rate' => $row->Item_Rate,
+                        'Item_Tot' => $row->Tot_Item,
+                    ];
+                }
+            }
+        
+            // Reset keys for DesignRow
+            foreach ($menu_set as &$order) {
+                $order['DesignRow'] = array_values($order['DesignRow']);
+            }
+            $menu_set = array_values($menu_set);
+        
+            return response()->json([
+                'message' => 'Data Found',
+                'details' => $menu_set,
+            ], 200);
+        
+        } catch (Exception $ex) {
+            $response = response()->json([
+                'message' => 'Error Found',
+                'details' => $ex->getMessage(),
+            ], 400);
+        
+            throw new HttpResponseException($response);
+        }
+    }
+
+    public function get_invoise_list(Int $org_id){
+        try {
+            $sql = DB::select("Select UDF_GET_ORG_SCHEMA(?) as db;",[$org_id]);
+            if(!$sql){
+              throw new Exception;
+            }
+            $org_schema = $sql[0]->db;
+            $db = Config::get('database.connections.mysql');
+            $db['database'] = $org_schema;
+            config()->set('database.connections.wax', $db);
+
+            $sql = DB::connection('wax')->select("Select m.Id,m.Sales_Date,m.Sales_No,p.Party_Name,p.Party_Add,p.Party_Gst,p.Party_Mob From trn_sales_master m Join mst_party_master p On p.Id=m.Party_Id;");
+
+            if (empty($sql)) {
+                // Custom validation for no data found
+                return response()->json([
+                    'message' => 'No Data Found',
+                    'details' => null,
+                ], 202);
+            }
+
+            return response()->json([
+                'message' => 'Data Found',
+                'details' => $sql,
+            ],200);
+
+        } catch (Exception $ex) {
+            $response = response()->json([
+                'message' => 'Error Found',
+                'details' => $ex->getMessage(),
+            ],400);
+
+            throw new HttpResponseException($response);
+        }
+    }
+
+    public function get_pur_party_list(Int $org_id){
+        try {
+            $sql = DB::select("Select UDF_GET_ORG_SCHEMA(?) as db;",[$org_id]);
+            if(!$sql){
+              throw new Exception;
+            }
+            $org_schema = $sql[0]->db;
+            $db = Config::get('database.connections.mysql');
+            $db['database'] = $org_schema;
+            config()->set('database.connections.wax', $db);
+
+            $sql = DB::connection('wax')->select("Select Id,Party_Name,Party_Add,Party_Mob,Party_Gst From mst_party_master Where Party_Type=2;");
+
+            if (empty($sql)) {
+                // Custom validation for no data found
+                return response()->json([
+                    'message' => 'No Data Found',
+                    'details' => null,
+                ], 202);
+            }
+
+            return response()->json([
+                'message' => 'Data Found',
+                'details' => $sql,
+            ],200);
+
+        } catch (Exception $ex) {
+            $response = response()->json([
+                'message' => 'Error Found',
+                'details' => $ex->getMessage(),
+            ],400);
+
+            throw new HttpResponseException($response);
+        } 
     }
 }

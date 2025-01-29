@@ -143,6 +143,11 @@ Route::group([
     Route::post('/Org/ProcessInventory/ProcessOrder',[ProcessInventory::class,'process_work_order']);
     Route::get('/Org/ProcessInventory/GetInvoiseOrder/{org_id}/{party_id}',[ProcessInventory::class,'get_complete_order_list']);
     Route::put('/Org/ProcessInventory/FinalOrderProcess',[ProcessInventory::class,'process_final_process']);
+    Route::post('/Org/ProcessInventory/PostInvoise',[ProcessInventory::class,'process_invoise']);
+    Route::put('/Org/ProcessInventory/CalcelInvoise',[ProcessInventory::class,'cancel_invoise']);
+    Route::get('/Org/ProcessInventory/GetInvoisePrint/{org_id}/{sale_id}',[ProcessInventory::class,'process_print_invoise']);
+    Route::get('/Org/ProcessInventory/InvoiseList/{org_id}',[ProcessInventory::class,'get_invoise_list']);
+    Route::get('/Org/ProcessInventory/GetPurchaseParty/{org_id}',[ProcessInventory::class,'get_pur_party_list']);
     // Inventory Voucher Route End
 
 });
