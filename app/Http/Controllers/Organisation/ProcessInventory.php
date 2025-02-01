@@ -1114,4 +1114,95 @@ class ProcessInventory extends Controller
             throw new HttpResponseException($response);
         } 
     }
+
+    public function process_purchase(Request $request){
+        $validator = Validator::make($request->all(),[
+            'org_id' =>'required',
+            'pur_date' => 'required',
+            'pur_no' => 'required',
+            'party_id' => 'required',
+            'tot_amount' => 'required',
+            'tot_cgst' => 'required',
+            'tot_sgst' => 'required',
+            'tot_igst' => 'required',
+            'tot_round' => 'required',
+            'tot_discount' => 'required',
+            'year_id' => 'required',
+            'invoise_data' => 'required'
+        ]);
+        if($validator->passes()){
+            try {
+
+                $sql = DB::select("Select UDF_GET_ORG_SCHEMA(?) as db;",[$request->org_id]);
+                if(!$sql){
+                throw new Exception;
+                }
+                $org_schema = $sql[0]->db;
+                $db = Config::get('database.connections.mysql');
+                $db['database'] = $org_schema;
+                config()->set('database.connections.wax', $db);
+                DB::connection('wax')->beginTransaction();
+
+                $order_details = $this->convertToObject($request->invoise_data);
+                $drop_table = DB::connection('wax')->statement("Drop Temporary Table If Exists tempitemdata;");
+                $create_tabl = DB::connection('wax')->statement("Create Temporary Table tempitemdata
+                                                                (
+                                                                    Item_Id			Int,
+                                                                    Item_Gl			Int,
+                                                                    Item_Qnty		Int,
+                                                                    Item_Rate		Numeric(18,3),
+                                                                    Item_Tot		Numeric(18,2),
+                                                                    Item_CGST		Numeric(18,2),
+                                                                    Item_SGST		Numeric(18,2),
+                                                                    Item_IGST		Numeric(18,2)
+                                                                );");
+                foreach ($order_details as $order_data) {
+                   DB::connection('wax')->statement("Insert Into tempitemdata (Item_Id,Item_Gl,Item_Qnty,Item_Rate,Item_Tot,Item_CGST,Item_SGST,Item_IGST) Values (?,?,?,?,?,?,?,?);",[$order_data->item_id,$order_data->item_gl,$order_data->item_qnty,$order_data->item_rate,$order_data->item_tot,$order_data->item_cgst,$order_data->item_sgst,$order_data->item_igst]);
+                }
+
+                $sql = DB::connection('wax')->statement("Call USP_ADD_EDIT_PURCHASE(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,@error,@message);",[null,$request->pur_date,$request->pur_no,$request->party_id,$request->tot_amount,$request->tot_cgst,$request->tot_sgst,$request->tot_igst,$request->tot_round,$request->tot_discount,$request->year_id,$request->bank_id,$request->is_credit,auth()->user()->Id,1]);
+
+                if(!$sql){
+                    throw new Exception;
+                }
+                $result = DB::connection('wax')->select("Select @error As Error_No,@message As Message,@sale_id As Sales_Id;");
+                $error_No = $result[0]->Error_No;
+                $message = $result[0]->Message;
+    
+                if($error_No<0){
+                    DB::connection('wax')->rollBack();
+                    return response()->json([
+                        'message' => $message,
+                        'details' => null,
+                    ],202);
+                }
+                else{
+                    DB::connection('wax')->commit();
+                    return response()->json([
+                        'message' => 'Purchase Voucher Is Posted Successfully !!',
+                        'details' => null,
+                    ],200);
+                }
+
+            } catch (Exception $ex) {
+                DB::rollBack(); 
+                $response = response()->json([
+                    'message' => $ex->getMessage(),
+                    'details' => null,
+                ],400);
+    
+                throw new HttpResponseException($response);
+            }
+        }
+        else{
+            $errors = $validator->errors();
+
+            $response = response()->json([
+              'message' => $errors->messages(),
+              'details' => null,
+          ],202);
+      
+          throw new HttpResponseException($response);
+        }
+    }
 }

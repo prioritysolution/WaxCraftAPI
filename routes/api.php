@@ -148,6 +148,7 @@ Route::group([
     Route::get('/Org/ProcessInventory/GetInvoisePrint/{org_id}/{sale_id}',[ProcessInventory::class,'process_print_invoise']);
     Route::get('/Org/ProcessInventory/InvoiseList/{org_id}',[ProcessInventory::class,'get_invoise_list']);
     Route::get('/Org/ProcessInventory/GetPurchaseParty/{org_id}',[ProcessInventory::class,'get_pur_party_list']);
+    Route::post('/Org/ProcessInventory/PostPurchase',[ProcessInventory::class,'process_purchase']);
     // Inventory Voucher Route End
 
 });

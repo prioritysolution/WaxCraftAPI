@@ -7,6 +7,7 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Validator;
 use Illuminate\Support\Facades\Config;
 use Illuminate\Http\Exceptions\HttpResponseException;
+use App\Traits\ImageUpload;
 use Hash;
 use Exception;
 use Session;
@@ -15,7 +16,26 @@ use \stdClass;
 
 class ProcessMaster extends Controller
 {
+    use ImageUpload;
+    // public function convertToObject($array) {
+    //     $object = new stdClass();
+    //     foreach ($array as $key => $value) {
+    //         if (is_array($value)) {
+    //             $value = $this->convertToObject($value);
+    //         }
+    //         $object->$key = $value;
+    //     }
+    //     return $object;
+    // }
+
     public function convertToObject($array) {
+        if (is_string($array)) {
+            $array = json_decode($array, true); // Decode JSON to an associative array
+            if (json_last_error() !== JSON_ERROR_NONE) {
+                throw new Exception("Invalid JSON format in design_array");
+            }
+        }
+        
         $object = new stdClass();
         foreach ($array as $key => $value) {
             if (is_array($value)) {
@@ -1492,7 +1512,7 @@ class ProcessMaster extends Controller
             $db['database'] = $org_schema;
             config()->set('database.connections.wax', $db);
 
-            $sql = DB::connection('wax')->select("Select m.Id,m.Cat_Id,m.Model_Id,m.Size_Id,m.Color_Id,m.Item_Name,m.Item_Sh_Name,m.Unit_Id,m.Purchase_Gl,m.Sales_Gl,m.CGST,m.SGST,m.IGST,m.Pur_Rate,m.Sale_Rate,c.Cat_Name,(Select Intem_Qnty From mst_item_stock Where Item_Id=m.Id) As Open_Qnty,(Select Item_Rate From mst_item_stock Where Item_Id=m.Id) As Item_Rate From mst_item_master m Join mst_item_catagary c On c.Id=m.Cat_Id;");
+            $sql = DB::connection('wax')->select("Select m.Id,m.Cat_Id,m.Model_Id,m.Size_Id,m.Color_Id,m.Item_Name,m.Item_Sh_Name,m.Unit_Id,m.Purchase_Gl,m.Sales_Gl,m.CGST,m.SGST,m.IGST,m.Pur_Rate,m.Sale_Rate,c.Cat_Name,(Select Intem_Qnty From mst_item_stock Where Item_Id=m.Id And Event_Type='OB') As Open_Qnty,(Select Item_Rate From mst_item_stock Where Item_Id=m.Id And Event_Type='OB') As Item_Rate From mst_item_master m Join mst_item_catagary c On c.Id=m.Cat_Id;");
 
             if (empty($sql)) {
                 // Custom validation for no data found
@@ -1821,6 +1841,8 @@ class ProcessMaster extends Controller
             'design_name' => 'required',
             'design_no' => 'required',
             'wt' => 'required',
+            'wt_rate' => 'required',
+            'deg_img' => 'required',
             'polish' => 'required',
             'design_array' => 'required',
         ]);
@@ -1842,13 +1864,33 @@ class ProcessMaster extends Controller
                 $create_tabl = DB::connection('wax')->statement("Create Temporary Table tempdetails
                                         (
                                             Item_Id				Int,
-                                            Qnty                Int
+                                            Qnty                Int,
+                                            Making_Rate         Numeric(18,2)
                                         );");
                 foreach ($design_details as $design_data) {
-                   DB::connection('wax')->statement("Insert Into tempdetails (Item_Id,Qnty) Values (?,?);",[$design_data->item_id,$design_data->qnty]);
+                   DB::connection('wax')->statement("Insert Into tempdetails (Item_Id,Qnty,Making_Rate) Values (?,?,?);",[$design_data->item_id,$design_data->qnty,$design_data->making_rate]);
+                }
+                $img_name = null;
+                if ($request->hasFile('deg_img')) {
+                    $image = $request->file('deg_img');
+                    $extension = strtolower($image->getClientOriginalExtension());
+                    $allowedExtensions = ['jpeg', 'jpg', 'png'];
+                    if(in_array($extension, $allowedExtensions)){
+                        // Define the directory dynamically
+                        $directory = 'design/' . $request->org_id;
+                            
+                        // Upload and compress the image
+                        $path = $this->uploadAndCompressImage($image, 'img',$directory);
+                        $img_name = $path;
+                        // Save the path to the database or perform other actions
+                    }
+                    else{
+                        throw new Exception("Invalid File Format !!");
+                    }
+        
                 }
 
-                $sql = DB::connection('wax')->statement("Call USP_ADD_EDIT_DESIGN(?,?,?,?,?,?,?,@error,@message);",[null,$request->design_name,$request->design_no,$request->wt,$request->polish,auth()->user()->Id,1]);
+                $sql = DB::connection('wax')->statement("Call USP_ADD_EDIT_DESIGN(?,?,?,?,?,?,?,?,?,@error,@message);",[null,$request->design_name,$request->design_no,$request->wt,$request->wt_rate,$request->polish,$img_name,auth()->user()->Id,1]);
 
                 if(!$sql){
                     throw new Exception;
@@ -1905,7 +1947,7 @@ class ProcessMaster extends Controller
             $db['database'] = $org_schema;
             config()->set('database.connections.wax', $db);
 
-            $sql = DB::connection('wax')->select("Select m.Id,m.Design_Name,m.Design_No,m.WT,m.Polish,d.Item_Id,d.Qnty,i.Item_Name,i.Item_Sh_Name From mst_design_master m Join mst_design_details d On d.Design_Id=m.Id Join mst_item_master i On i.Id=d.Item_Id;");
+            $sql = DB::connection('wax')->select("Select m.Id,m.Design_Name,m.Design_No,m.WT,m.Wt_Rate,m.Polish,d.Item_Id,d.Qnty,d.Making_Rate,m.Image,i.Item_Name,i.Item_Sh_Name From mst_design_master m Join mst_design_details d On d.Design_Id=m.Id Join mst_item_master i On i.Id=d.Item_Id;");
 
             if (empty($sql)) {
                 // Custom validation for no data found
@@ -1924,6 +1966,8 @@ class ProcessMaster extends Controller
                         'Design_Name' => $row->Design_Name,
                         'Design_No' => $row->Design_No,
                         'WT' => $row->WT,
+                        'Wt_Rate' => $row->Wt_Rate,
+                        'image' => $this->getUrl($org_id,$row->Image),
                         'Polish' => $row->Polish,
                         "childrow" => []
                     ];
@@ -1932,6 +1976,7 @@ class ProcessMaster extends Controller
                     $menu_set[$row->Id]['childrow'][] = [
                         'Item_Id' => $row->Item_Id,
                         'Qnty' => $row->Qnty,
+                        'Making_Rate' => $row->Making_Rate,
                         'Item_Name' => $row->Item_Name,
                         'Item_Sh_Name' => $row->Item_Sh_Name
                     ];
