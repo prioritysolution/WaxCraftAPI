@@ -7,6 +7,7 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Validator;
 use Illuminate\Support\Facades\Config;
 use Illuminate\Http\Exceptions\HttpResponseException;
+use App\Traits\ImageUpload;
 use Hash;
 use Exception;
 use Session;
@@ -15,6 +16,7 @@ use \stdClass;
 
 class ProcessInventory extends Controller
 {
+    use ImageUpload;
     public function convertToObject($array) {
         $object = new stdClass();
         foreach ($array as $key => $value) {
@@ -109,7 +111,7 @@ class ProcessInventory extends Controller
             $db['database'] = $org_schema;
             config()->set('database.connections.wax', $db);
 
-            $sql = DB::connection('wax')->select("Select m.Id,m.Design_Name,m.Design_No,m.WT,m.Polish,d.Item_Id,d.Qnty,i.Item_Name,i.Item_Sh_Name,UDF_GET_ITEM_RATE(d.Item_Id) As Item_Rate,(UDF_GET_ITEM_RATE(d.Item_Id) * d.Qnty) As Item_Tot From mst_design_master m Join mst_design_details d On d.Design_Id=m.Id Join mst_item_master i On i.Id=d.Item_Id Where m.Id=?;",[$design_id]);
+            $sql = DB::connection('wax')->select("Select m.Id,m.Design_Name,m.Design_No,m.WT,m.Wt_Rate,m.Polish,d.Item_Id,d.Qnty,i.Item_Name,i.Item_Sh_Name,UDF_GET_ITEM_RATE(d.Item_Id) As Item_Rate,d.Making_Rate,(UDF_GET_ITEM_RATE(d.Item_Id) * d.Qnty)+(d.Qnty*d.Making_Rate) As Item_Tot,m.Image,i.Purchase_Gl From mst_design_master m Join mst_design_details d On d.Design_Id=m.Id Join mst_item_master i On i.Id=d.Item_Id Where m.Id=?;",[$design_id]);
 
             if (empty($sql)) {
                 // Custom validation for no data found
@@ -127,17 +129,21 @@ class ProcessInventory extends Controller
                         'Design_Name' => $row->Design_Name,
                         'Design_No' => $row->Design_No,
                         'WT' => $row->WT,
+                        'Wt_Rate' => $row->Wt_Rate,
                         'Polish' => $row->Polish,
+                        'Image' =>$this->getUrl($org_id,$row->Image),
                         "childrow" => []
                     ];
                 }
                 if ($row->Item_Id) {
                     $menu_set[$row->Id]['childrow'][] = [
                         'Item_Id' => $row->Item_Id,
+                        'Item_GL' => $row->Purchase_Gl,
                         'Qnty' => $row->Qnty,
                         'Item_Name' => $row->Item_Name,
                         'Item_Sh_Name' => $row->Item_Sh_Name,
                         'Item_Rate' => $row->Item_Rate,
+                        'Making_Rate' => $row->Making_Rate,
                         'Item_Total' => $row->Item_Tot
                     ];
                 }
@@ -164,7 +170,7 @@ class ProcessInventory extends Controller
             'org_id' =>'required',
             'ord_date' => 'required',
             'party_id' => 'required',
-            'tot_amt' => 'required',
+            'is_own' => 'required',
             'year_id' => 'required',
             'order_array' => 'required'
         ]);
@@ -188,20 +194,24 @@ class ProcessInventory extends Controller
                                                                     Design_Id		Int,
                                                                     Qnty			Numeric(18,2),
                                                                     Qnty_Rate       Numeric(18,2),
+                                                                    Wt              Numeric(18,2),
                                                                     Wt_Rate			Numeric(18,2),
                                                                     Tot_Wt			Numeric(18,2),
                                                                     Polish_Rate		Numeric(18,2),
                                                                     Tot_Polish		Numeric(18,2),
                                                                     Item_Id			Int,
+                                                                    Item_Gl         Int,
                                                                     Item_Qnty		Numeric(18,2),
                                                                     Item_Rate		Numeric(18,3),
-                                                                    Item_Tot		Numeric(18,2)
+                                                                    Making_Rate     Numeric(18,3),
+                                                                    Item_Tot		Numeric(18,3),
+                                                                    Item_Grand_Tot  Numeric(18,3)
                                                                 );");
                 foreach ($order_details as $order_data) {
-                   DB::connection('wax')->statement("Insert Into temporddetails (Design_Id,Qnty,Qnty_Rate,Wt_Rate,Tot_Wt,Polish_Rate,Tot_Polish,Item_Id,Item_Qnty,Item_Rate,Item_Tot) Values (?,?,?,?,?,?,?,?,?,?,?);",[$order_data->design_id,$order_data->qnty,$order_data->qnty_rate,$order_data->wt_rate,$order_data->tot_wt,$order_data->polish_rate,$order_data->tot_polish,$order_data->item_id,$order_data->item_qnty,$order_data->item_rate,$order_data->item_tot]);
+                   DB::connection('wax')->statement("Insert Into temporddetails (Design_Id,Qnty,Qnty_Rate,Wt_Rate,Tot_Wt,Polish_Rate,Tot_Polish,Item_Id,Item_Qnty,Item_Rate,Item_Tot,Wt,Item_Grand_Tot,Making_Rate,Item_Gl) Values (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?);",[$order_data->design_id,$order_data->qnty,$order_data->qnty_rate,$order_data->wt_rate,$order_data->tot_wt,$order_data->polish_rate,$order_data->tot_polish,$order_data->item_id,$order_data->item_qnty,$order_data->item_rate,$order_data->item_tot,$order_data->wt,$order_data->item_grand_tot,$order_data->making_rate,$order_data->Item_Gl]);
                 }
 
-                $sql = DB::connection('wax')->statement("Call USP_ADD_EDIT_ORDER(?,?,?,?,?,?,?,@error,@message);",[null,$request->ord_date,$request->party_id,$request->tot_amt,$request->year_id,auth()->user()->Id,1]);
+                $sql = DB::connection('wax')->statement("Call USP_ADD_EDIT_ORDER(?,?,?,?,?,?,?,@error,@message);",[null,$request->ord_date,$request->party_id,$request->year_id,$request->is_own,auth()->user()->Id,1]);
 
                 if(!$sql){
                     throw new Exception;
@@ -268,9 +278,11 @@ class ProcessInventory extends Controller
                 d.Design_Id,
                 dn.Design_Name,
                 dn.Design_No,
+                dn.Image,
                 d.Order_Qnty,
                 d.Deg_Rate,
                 UDF_GET_ORDER_STATUS(m.Id) AS Order_Status,
+                d.Wt,
                 d.Wt_Rate,
                 d.Tot_Wt,
                 d.Polish_Rate,
@@ -279,6 +291,7 @@ class ProcessInventory extends Controller
                 UDF_GET_ITEM_NAME(i.Item_Id) As Item_Name,
                 i.Item_Qnty,
                 i.Item_Rate,
+                i.Making_Rate,
                 i.Item_Tot
             FROM 
                 mst_order_master m
@@ -324,10 +337,12 @@ class ProcessInventory extends Controller
                         'Design_No' => $row->Design_No,
                         'Order_Qnty' => $row->Order_Qnty,
                         'Design_Rate' => $row->Deg_Rate,
-                        'Wt' => $row->Wt_Rate,
+                        'Wt' => $row->Wt,
+                        'Wt_Rate' => $row->Wt_Rate,
                         'Tot_Wt' => $row->Tot_Wt,
                         'Polish' => $row->Polish_Rate,
                         'Tot_Polish' => $row->Tot_Polish,
+                        'Image' => $this->getUrl($org_id,$row->Image),
                         'ItemRow' => []
                     ];
                 }
@@ -339,6 +354,7 @@ class ProcessInventory extends Controller
                         'Item_Name' => $row->Item_Name,
                         'Item_Qnty' => $row->Item_Qnty,
                         'Item_Rate' => $row->Item_Rate,
+                        'Making_Rate' => $row->Making_Rate,
                         'Item_Tot' => $row->Item_Tot,
                     ];
                 }
@@ -588,10 +604,12 @@ class ProcessInventory extends Controller
                 d.Design_Id,
                 dn.Design_Name,
                 dn.Design_No,
+                dn.Image,
                 d.Order_Qnty,
                 d.Deg_Rate,
                 UDF_GET_ORDER_STATUS(m.Id) AS Order_Status,
                 d.Wt_Rate,
+                d.Wt,
                 d.Tot_Wt,
                 d.Polish_Rate,
                 d.Tot_Polish,
@@ -599,6 +617,7 @@ class ProcessInventory extends Controller
                 UDF_GET_ITEM_NAME(i.Item_Id) As Item_Name,
                 i.Item_Qnty,
                 i.Item_Rate,
+                i.Making_Rate,
                 i.Item_Tot
             FROM 
                 mst_order_master m
@@ -642,9 +661,11 @@ class ProcessInventory extends Controller
                         'Design_Id' => $row->Design_Id,
                         'Design_Name' => $row->Design_Name,
                         'Design_No' => $row->Design_No,
+                        'Image' => $this->getUrl($org_id,$row->Image),
                         'Order_Qnty' => $row->Order_Qnty,
                         'Design_Rate' => $row->Deg_Rate,
-                        'Wt' => $row->Wt_Rate,
+                        'Wt' => $row->Wt,
+                        'Wt_Rate' => $row->Wt_Rate,
                         'Tot_Wt' => $row->Tot_Wt,
                         'Polish' => $row->Polish_Rate,
                         'Tot_Polish' => $row->Tot_Polish,
@@ -659,6 +680,7 @@ class ProcessInventory extends Controller
                         'Item_Name' => $row->Item_Name,
                         'Item_Qnty' => $row->Item_Qnty,
                         'Item_Rate' => $row->Item_Rate,
+                        'Making_Rate' => $row->Making_Rate,
                         'Item_Tot' => $row->Item_Tot,
                     ];
                 }
@@ -784,6 +806,7 @@ class ProcessInventory extends Controller
                                                                     Order_Id		Int,
                                                                     Design_Id		Int,
                                                                     Qnty			Numeric(18,2),
+                                                                    Wt              Numeric(18,3),
                                                                     Wt_Rate			Numeric(18,2),
                                                                     Tot_Wt			Numeric(18,2),
                                                                     Polish_Rate		Numeric(18,2),
@@ -791,10 +814,11 @@ class ProcessInventory extends Controller
                                                                     Item_Id			Int,
                                                                     Item_Qnty		Numeric(18,2),
                                                                     Item_Rate		Numeric(18,3),
-                                                                    Item_Tot		Numeric(18,2)
+                                                                    Making_Rate     Numeric(18,3),
+                                                                    Item_Tot		Numeric(18,3)
                                                                 );");
                 foreach ($order_details as $order_data) {
-                   DB::connection('wax')->statement("Insert Into temporddetails (Order_Id,Design_Id,Qnty,Wt_Rate,Tot_Wt,Polish_Rate,Tot_Polish,Item_Id,Item_Qnty,Item_Rate,Item_Tot) Values (?,?,?,?,?,?,?,?,?,?,?);",[$order_data->order_id,$order_data->design_id,$order_data->qnty,$order_data->wt_rate,$order_data->tot_wt,$order_data->polish_rate,$order_data->tot_polish,$order_data->item_id,$order_data->item_qnty,$order_data->item_rate,$order_data->item_tot]);
+                   DB::connection('wax')->statement("Insert Into temporddetails (Order_Id,Design_Id,Qnty,Wt_Rate,Tot_Wt,Polish_Rate,Tot_Polish,Item_Id,Item_Qnty,Item_Rate,Item_Tot,Wt,Making_Rate) Values (?,?,?,?,?,?,?,?,?,?,?,?,?);",[$order_data->order_id,$order_data->design_id,$order_data->qnty,$order_data->wt_rate,$order_data->tot_wt,$order_data->polish_rate,$order_data->tot_polish,$order_data->item_id,$order_data->item_qnty,$order_data->item_rate,$order_data->item_tot,$order_data->wt,$order_data->making_rate]);
                 }
 
                 $sql = DB::connection('wax')->statement("Call USP_ADD_EDIT_SALE(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,@error,@message,@sale_id);",[null,$request->sales_date,$request->party_id,$request->tot_amount,$request->gst_rate,$request->tot_cgst,$request->tot_sgst,$request->tot_igst,$request->tot_round,$request->tot_discount,$request->year_id,$request->bank_id,$request->is_credit,auth()->user()->Id,1]);
@@ -937,7 +961,9 @@ class ProcessInventory extends Controller
                                 d.Design_Id,
                                 dn.Design_Name,
                                 dn.Design_No,
+                                dn.Image,
                                 d.Deg_Qnty,
+                                d.Wt,
                                 d.Wt_Rate,
                                 d.Tot_Wt,
                                 d.Polish_Rate,
@@ -946,6 +972,7 @@ class ProcessInventory extends Controller
                                 UDF_GET_ITEM_NAME(i.Item_Id) AS Item_Name,
                                 i.Item_Qnty,
                                 i.Item_Rate,
+                                i.Making_Rate,
                                 i.Tot_Item
                             FROM
                                 trn_sales_master m
@@ -1001,8 +1028,10 @@ class ProcessInventory extends Controller
                         'Design_Id' => $row->Design_Id,
                         'Design_Name' => $row->Design_Name,
                         'Design_No' => $row->Design_No,
+                        'Image' => $this->getUrl($org_id,$row->Image),
                         'Order_Qnty' => $row->Deg_Qnty,
-                        'Wt' => $row->Wt_Rate,
+                        'Wt' => $row->Wt,
+                        'Wt_Rate' => $row->Wt_Rate,
                         'Tot_Wt' => $row->Tot_Wt,
                         'Polish' => $row->Polish_Rate,
                         'Tot_Polish' => $row->Tot_Polish,
@@ -1017,6 +1046,7 @@ class ProcessInventory extends Controller
                         'Item_Name' => $row->Item_Name,
                         'Item_Qnty' => $row->Item_Qnty,
                         'Item_Rate' => $row->Item_Rate,
+                        'Making_Rate' => $row->Making_Rate,
                         'Item_Tot' => $row->Tot_Item,
                     ];
                 }

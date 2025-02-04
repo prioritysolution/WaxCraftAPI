@@ -1865,7 +1865,7 @@ class ProcessMaster extends Controller
                                         (
                                             Item_Id				Int,
                                             Qnty                Int,
-                                            Making_Rate         Numeric(18,2)
+                                            Making_Rate         Numeric(18,3)
                                         );");
                 foreach ($design_details as $design_data) {
                    DB::connection('wax')->statement("Insert Into tempdetails (Item_Id,Qnty,Making_Rate) Values (?,?,?);",[$design_data->item_id,$design_data->qnty,$design_data->making_rate]);
@@ -1968,6 +1968,7 @@ class ProcessMaster extends Controller
                         'WT' => $row->WT,
                         'Wt_Rate' => $row->Wt_Rate,
                         'image' => $this->getUrl($org_id,$row->Image),
+                        'File_Name' => $row->Image,
                         'Polish' => $row->Polish,
                         "childrow" => []
                     ];
@@ -2043,6 +2044,7 @@ class ProcessMaster extends Controller
             'design_name' => 'required',
             'design_no' => 'required',
             'wt' => 'required',
+            'wt_rate' => 'required',
             'polish' => 'required',
             'design_array' => 'required',
         ]);
@@ -2064,13 +2066,37 @@ class ProcessMaster extends Controller
                 $create_tabl = DB::connection('wax')->statement("Create Temporary Table tempdetails
                                         (
                                             Item_Id				Int,
-                                            Qnty                Int
+                                            Qnty                Int,
+                                            Making_Rate         Numeric(18,3)
                                         );");
                 foreach ($design_details as $design_data) {
-                   DB::connection('wax')->statement("Insert Into tempdetails (Item_Id,Qnty) Values (?,?);",[$design_data->item_id,$design_data->qnty]);
+                   DB::connection('wax')->statement("Insert Into tempdetails (Item_Id,Qnty,Making_Rate) Values (?,?,?);",[$design_data->item_id,$design_data->qnty,$design_data->making_rate]);
                 }
 
-                $sql = DB::connection('wax')->statement("Call USP_ADD_EDIT_DESIGN(?,?,?,?,?,?,?,@error,@message);",[$request->design_id,$request->design_name,$request->design_no,$request->wt,$request->polish,auth()->user()->Id,2]);
+                $img_name = null;
+                if ($request->hasFile('deg_img')) {
+                    $image = $request->file('deg_img');
+                    $extension = strtolower($image->getClientOriginalExtension());
+                    $allowedExtensions = ['jpeg', 'jpg', 'png'];
+                    if(in_array($extension, $allowedExtensions)){
+                        // Define the directory dynamically
+                        $directory = 'design/' . $request->org_id;
+                            
+                        // Upload and compress the image
+                        $path = $this->uploadAndCompressImage($image, 'img',$directory);
+                        $img_name = $path;
+                        // Save the path to the database or perform other actions
+                    }
+                    else{
+                        throw new Exception("Invalid File Format !!");
+                    }
+        
+                }
+                else{
+                    $img_name=$request->deg_img;
+                }
+
+                $sql = DB::connection('wax')->statement("Call USP_ADD_EDIT_DESIGN(?,?,?,?,?,?,?,?,?,@error,@message);",[$request->design_id,$request->design_name,$request->design_no,$request->wt,$request->wt_rate,$request->polish,$img_name,auth()->user()->Id,2]);
 
                 if(!$sql){
                     throw new Exception;

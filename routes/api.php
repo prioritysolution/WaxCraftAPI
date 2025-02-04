@@ -120,7 +120,7 @@ Route::group([
     Route::post('/Org/Master/AddDesign',[ProcessMaster::class,'process_design']);
     Route::get('/Org/Master/GetDesign/{org_id}',[ProcessMaster::class,'get_design_list']);
     Route::get('/Org/Master/GetCatItem/{org_id}/{cat_id}',[ProcessMaster::class,'get_cat_item_list']);
-    Route::put('/Org/Master/UpdateDesign',[ProcessMaster::class,'update_design']);
+    Route::post('/Org/Master/UpdateDesign',[ProcessMaster::class,'update_design']);
     Route::post('/Org/Master/AddEmployee',[ProcessMaster::class,'process_employee']);
     Route::get('/Org/Master/GetEmployeeList/{org_id}',[ProcessMaster::class,'get_emp_list']);
     Route::put('/Org/Master/UpdateEmployee',[ProcessMaster::class,'update_employee']);
