@@ -15,6 +15,7 @@ use App\Http\Controllers\Admin\ProcessOrganisation;
 use App\Http\Controllers\Organisation\ProcessUserLogin;
 use App\Http\Controllers\Organisation\ProcessMaster;
 use App\Http\Controllers\Organisation\ProcessInventory;
+use App\Http\Controllers\Organisation\ProcessAccounting;
 
 // User Controller End
 
@@ -150,6 +151,19 @@ Route::group([
     Route::get('/Org/ProcessInventory/GetPurchaseParty/{org_id}',[ProcessInventory::class,'get_pur_party_list']);
     Route::post('/Org/ProcessInventory/PostPurchase',[ProcessInventory::class,'process_purchase']);
     // Inventory Voucher Route End
+
+    // Accounting Voucher Route Start
+
+    Route::get('/Org/ProcessAccounting/GetLedgerList/{org_id}',[ProcessAccounting::class,'get_ledger_list']);
+    Route::get('/Org/ProcessAccounting/CheckParty/{org_id}/{ledger_id}',[ProcessAccounting::class,'get_ledger_party']);
+    Route::post('/Org/ProcessAccounting/PostReceiptsVoucher',[ProcessAccounting::class,'process_receipts_voucher']);
+    Route::get('/Org/ProcessAccounting/GetReceiptVoucher/{org_id}',[ProcessAccounting::class,'get_recpt_list']);
+    Route::put('/Org/ProcessAccounting/CancelReceiptVoucher',[ProcessAccounting::class,'cancel_recpt_voucher']);
+    Route::post('/Org/ProcessAccounting/PostPaymentVoucher',[ProcessAccounting::class,'process_payment_voucher']);
+    Route::get('/Org/ProcessAccounting/GetPaymentVoucher/{org_id}',[ProcessAccounting::class,'get_payment_list']);
+    Route::put('/Org/ProcessAccounting/CancelPaymentVoucher',[ProcessAccounting::class,'cancel_payment_voucher']);
+
+    // Accounting Voucher Route End
 
 });
 
