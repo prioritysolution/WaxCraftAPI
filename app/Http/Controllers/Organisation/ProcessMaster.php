@@ -2519,4 +2519,93 @@ class ProcessMaster extends Controller
             throw new HttpResponseException($response);
     }
     }
+
+    public function get_item_rate(Int $org_id,Int $item_id){
+        try {
+            $sql = DB::select("Select UDF_GET_ORG_SCHEMA(?) as db;",[$org_id]);
+            if(!$sql){
+              throw new Exception;
+            }
+            $org_schema = $sql[0]->db;
+            $db = Config::get('database.connections.mysql');
+            $db['database'] = $org_schema;
+            config()->set('database.connections.wax', $db);
+
+            $sql = DB::connection('wax')->select("Select UDF_GET_ITEM_RATE(?) As Rate;",[$item_id]);
+
+            if (empty($sql)) {
+                // Custom validation for no data found
+                return response()->json([
+                    'message' => 'No Data Found',
+                    'details' => null,
+                ], 202);
+            }
+
+            return response()->json([
+                'message' => 'Data Found',
+                'details' => $sql[0]->Rate,
+            ],200);
+
+        } catch (Exception $ex) {
+            $response = response()->json([
+                'message' => 'Error Found',
+                'details' => $ex->getMessage(),
+            ],400);
+
+            throw new HttpResponseException($response);
+        } 
+    }
+
+    public function process_item_rate(Request $request){
+        $validator = Validator::make($request->all(),[
+            'org_id' => 'required',
+            'item_id' => 'required',
+            'item_rate' => 'required'
+        ]);
+        if($validator->passes()){
+        try {
+
+            $sql = DB::select("Select UDF_GET_ORG_SCHEMA(?) as db;",[$request->org_id]);
+            if(!$sql){
+              throw new Exception;
+            }
+            $org_schema = $sql[0]->db;
+            $db = Config::get('database.connections.mysql');
+            $db['database'] = $org_schema;
+            config()->set('database.connections.wax', $db);
+            DB::connection('wax')->beginTransaction();
+            $sql = DB::connection('wax')->statement("Call USP_ADD_ITEM_RATE(?,?,?);",[$request->item_id,$request->item_rate,auth()->user()->Id]);
+
+            if(!$sql){
+                throw new Exception('Operation Error Found !!');
+            }
+
+                DB::connection('wax')->commit();
+                return response()->json([
+                    'message' => 'Item Rate Store Successfully !!',
+                    'details' => null,
+                ],200);
+            
+            
+        } catch (Exception $ex) {
+            DB::connection('wax')->rollBack();
+            $response = response()->json([
+                'message' => $ex->getMessage(),
+                'details' => null,
+            ],400);
+
+            throw new HttpResponseException($response);
+        }
+    }
+    else{
+        $errors = $validator->errors();
+
+            $response = response()->json([
+                'message' => $errors->messages(),
+                'details' => null,
+            ],202);
+        
+            throw new HttpResponseException($response);
+    }
+    }
 }

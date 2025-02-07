@@ -16,6 +16,7 @@ use App\Http\Controllers\Organisation\ProcessUserLogin;
 use App\Http\Controllers\Organisation\ProcessMaster;
 use App\Http\Controllers\Organisation\ProcessInventory;
 use App\Http\Controllers\Organisation\ProcessAccounting;
+use App\Http\Controllers\Organisation\ProcessInventoryReport;
 
 // User Controller End
 
@@ -129,6 +130,8 @@ Route::group([
     Route::post('/Org/Master/AddBankAccount',[ProcessMaster::class,'process_bank_Account']);
     Route::get('/Org/Master/GetBankAccount/{org_id}',[ProcessMaster::class,'get_bank_acct_list']);
     Route::put('/Org/Master/UpdateBankAccount',[ProcessMaster::class,'update_bank_account']);
+    Route::get('/Org/Master/GetItemRate/{org_id}/{item_id}',[ProcessMaster::class,'get_item_rate']);
+    Route::post('/Org/Master/PostItemRate',[ProcessMaster::class,'process_item_rate']);
 
     // End Master Route
 
@@ -162,9 +165,27 @@ Route::group([
     Route::post('/Org/ProcessAccounting/PostPaymentVoucher',[ProcessAccounting::class,'process_payment_voucher']);
     Route::get('/Org/ProcessAccounting/GetPaymentVoucher/{org_id}',[ProcessAccounting::class,'get_payment_list']);
     Route::put('/Org/ProcessAccounting/CancelPaymentVoucher',[ProcessAccounting::class,'cancel_payment_voucher']);
+    Route::get('/Org/ProcessAccounting/GetBankBalance',[ProcessAccounting::class,'get_bank_balance']);
+    Route::post('/Org/ProcessAccounting/PostBankDeposit',[ProcessAccounting::class,'process_bank_deposit']);
+    Route::get('/Org/ProcessAccounting/GetBankDeposit/{org_id}',[ProcessAccounting::class,'get_bank_dep_list']);
+    Route::put('/Org/ProcessAccounting/CancelBankDeposit',[ProcessAccounting::class,'cancel_bank_deposit']);
+    Route::post('/Org/ProcessAccounting/PostBankWithdrwan',[ProcessAccounting::class,'process_bank_withdrwan']);
+    Route::get('/Org/ProcessAccounting/GetBankWithdrwan/{org_id}',[ProcessAccounting::class,'get_bank_with_list']);
+    Route::put('/Org/ProcessAccounting/CancelBankWithdrwan',[ProcessAccounting::class,'cancel_bank_withdrwan']);
+    Route::post('/Org/ProcessAccounting/PostBankTransfer',[ProcessAccounting::class,'process_bank_transfer']);
+    Route::get('/Org/ProcessAccounting/GetBankTransfer/{org_id}',[ProcessAccounting::class,'list_bank_transfer']);
+    Route::put('/Org/ProcessAccounting/CancelBankTransfer',[ProcessAccounting::class,'cancel_bank_transfer']);
 
     // Accounting Voucher Route End
 
+    // Inventory Report
+
+    Route::get('/Org/ProcessInventoryReport/OrderBook',[ProcessInventoryReport::class,'process_order_book']);
+    Route::get('/Org/ProcessInventoryReport/SalesRegister',[ProcessInventoryReport::class,'process_sales_register']);
+    Route::get('/Org/ProcessInventoryReport/PurchaseRegister',[ProcessInventoryReport::class,'process_purchase_register']);
+    Route::get('/Org/ProcessInventoryReport/GetReportParty',[ProcessInventoryReport::class,'']);
+
+    // End Inventory Report
 });
 
 // User Route Area End Here
