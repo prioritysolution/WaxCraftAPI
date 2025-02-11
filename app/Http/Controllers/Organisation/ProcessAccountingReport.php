@@ -11,9 +11,9 @@ use Exception;
 use Session;
 use DB;
 
-class ProcessInventoryReport extends Controller
+class ProcessAccountingReport extends Controller
 {
-    public function process_order_book(Request $request){
+    public function process_daybook(Request $request){
         try {
             $sql = DB::select("Select UDF_GET_ORG_SCHEMA(?) as db;",[$request->org_id]);
             if(!$sql){
@@ -24,7 +24,142 @@ class ProcessInventoryReport extends Controller
             $db['database'] = $org_schema;
             config()->set('database.connections.wax', $db);
 
-            $sql = DB::connection('wax')->select("Call USP_RPT_ORDER_BOOK(?,?,?);",[$request->form_date,$request->to_date,$request->party_id]);
+            $sql = DB::connection('wax')->select("Call USP_RPT_DAYBOOK(?);",[$request->date]);
+
+            if (empty($sql)) {
+                // Custom validation for no data found
+                return response()->json([
+                    'message' => 'No Data Found',
+                    'details' => null,
+                ], 202);
+            }
+            $daubook_data = [];
+           
+            foreach ($sql as $daybook) {
+                if($daybook->Open_Balance){
+                    $daubook_data['Opening_Balance']=[
+                        'Opening_Cash' => $daybook->Open_Balance,
+                        'Receipt_Data' => [],
+                        'Payment_Data'=>[],
+                        'Closing_Cash'=>'',
+                    ];
+                }
+
+                if($daybook->Rec_Vouch){
+                    $daubook_data['Opening_Balance']['Receipt_Data'][]=[
+                        'Vouch_No' => $daybook->Rec_Vouch,
+                        'Ledger_Name' => $daybook->Ledger_Name,
+                        'Cash_Amt' => $daybook->Receipt_Cash,
+                        'Trf_Amt' => $daybook->Receipt_Trf,
+                        'Tot_Amt' => $daybook->Tot_Receipt
+                    ];
+                }
+
+                if($daybook->Payment_Vouch){
+                    $daubook_data['Opening_Balance']['Payment_Data'][]=[
+                        'Vouch_No' => $daybook->Payment_Vouch,
+                        'Ledger_Name' => $daybook->Ledger_Name,
+                        'Cash_Amt' => $daybook->Payment_Cash,
+                        'Trf_Amt' => $daybook->Payment_Transfer,
+                        'Tot_Amt' => $daybook->Payment_Total
+                    ];
+                }
+
+                 if($daybook->Closing_Balance){
+                    $daubook_data['Opening_Balance']['Closing_Cash']=$daybook->Closing_Balance;
+                }
+            }
+            $daubook_data = array_values($daubook_data);
+            return response()->json([
+                'message' => 'Data Found',
+                'details' => $daubook_data,
+            ],200);
+
+        } catch (Exception $ex) {
+            $response = response()->json([
+                'message' => 'Error Found',
+                'details' => $ex->getMessage(),
+            ],400);
+
+            throw new HttpResponseException($response);
+        }
+    }
+
+    public function process_bank_ledger(Request $request){
+        try {
+            $sql = DB::select("Select UDF_GET_ORG_SCHEMA(?) as db;",[$request->org_id]);
+            if(!$sql){
+              throw new Exception;
+            }
+            $org_schema = $sql[0]->db;
+            $db = Config::get('database.connections.mysql');
+            $db['database'] = $org_schema;
+            config()->set('database.connections.wax', $db);
+
+            $sql = DB::connection('wax')->select("Call USP_RPT_BANK_BOOK(?,?,?);",[$request->frm_date,$request->to_date,$request->bank_id]);
+
+            if (empty($sql)) {
+                // Custom validation for no data found
+                return response()->json([
+                    'message' => 'No Data Found',
+                    'details' => null,
+                ], 202);
+            }
+            $bank_data = [];
+            foreach ($sql as $bank) {
+               if(!isset($bank_data[$bank->Account_Id])){
+                $bank_data[$bank->Account_Id]=[
+                    'Bank_Name' => $bank->Bank_Name,
+                    'Branch_Name' => $bank->Branch_Name,
+                    'Bank_IFSC' => $bank->Bank_IFSC,
+                    'Account_No' => $bank->Account_No,
+                    'Transaction_Data'=>[],
+                ];
+               }
+               if($bank->Trans_Id){
+                if(!isset($bank_data[$bank->Account_Id]['Transaction_Data'][$bank->Trans_Id])){
+                    $bank_data[$bank->Account_Id]['Transaction_Data'][] = [
+                        'Trans_Date' => $bank->Trans_Date,
+                        'Particular' => $bank->Particular,
+                        'Debit' => $bank->Dr_Amt,
+                        'Credit' => $bank->Cr_Amt,
+                        'Balance' => $bank->Balance,
+                        'Balance_Type' => $bank->Bal_Type,
+                    ];
+               }
+               }
+                
+               
+            }
+           
+            $bank_data = array_values($bank_data);
+            return response()->json([
+                'message' => 'Data Found',
+                'details' => $bank_data,
+            ],200);
+
+        } catch (Exception $ex) {
+            $response = response()->json([
+                'message' => 'Error Found',
+                'details' => $ex->getMessage(),
+            ],400);
+
+            throw new HttpResponseException($response);
+        }
+    }
+
+    public function process_ledger(Int $org_id){
+        try {
+            $sql = DB::select("Select UDF_GET_ORG_SCHEMA(?) as db;",[$org_id]);
+            if(!$sql){
+              throw new Exception;
+            }
+            $org_schema = $sql[0]->db;
+            $db = Config::get('database.connections.mysql');
+            $db['database'] = $org_schema;
+            config()->set('database.connections.wax', $db);
+
+            $sql = DB::connection('wax')->select("Select Id,Ledger_Name From mst_org_acct_ledger Where Id<>3;");
 
             if (empty($sql)) {
                 // Custom validation for no data found
@@ -49,7 +184,7 @@ class ProcessInventoryReport extends Controller
         }
     }
 
-    public function process_sales_register(Request $request){
+    public function process_acct_ledger(Request $request){
         try {
             $sql = DB::select("Select UDF_GET_ORG_SCHEMA(?) as db;",[$request->org_id]);
             if(!$sql){
@@ -60,124 +195,7 @@ class ProcessInventoryReport extends Controller
             $db['database'] = $org_schema;
             config()->set('database.connections.wax', $db);
 
-            $sql = DB::connection('wax')->select("Call USP_RPT_SALES_REGISTER(?,?,?);",[$request->form_date,$request->to_date,$request->party_id]);
-
-            if (empty($sql)) {
-                // Custom validation for no data found
-                return response()->json([
-                    'message' => 'No Data Found',
-                    'details' => null,
-                ], 202);
-            }
-            $sales_data = [];
-            foreach ($sql as $sale_detail) {
-               if(!isset($sales_data[$sale_detail->Id])){
-                $sales_data[$sale_detail->Id]=[
-                    'Id' => $sale_detail->Id,
-                    'Sales_Date' => $sale_detail->Sales_Date,
-                    'Sale_No' => $sale_detail->Sales_No,
-                    'Party_Name' => $sale_detail->Party_Name,
-                    'Amount' => $sale_detail->Sales_Amount,
-                    'Design_Data' => [],
-                ];
-               }
-
-               if(!isset($sales_data[$sale_detail->Id]['Design_Data'][$sale_detail->Design_Id])){
-                    $sales_data[$sale_detail->Id]['Design_Data'][] = [
-                        'Design_Id' => $sale_detail->Design_Id,
-                        'Design_Name' => $sale_detail->Design_Name,
-                        'Qnty' => $sale_detail->Deg_Qnty,
-                    ];
-               }
-
-            }
-            $sales_data = array_values($sales_data);
-            return response()->json([
-                'message' => 'Data Found',
-                'details' => $sales_data,
-            ],200);
-
-        } catch (Exception $ex) {
-            $response = response()->json([
-                'message' => 'Error Found',
-                'details' => $ex->getMessage(),
-            ],400);
-
-            throw new HttpResponseException($response);
-        }
-    }
-
-    public function process_purchase_register(Request $request){
-        try {
-            $sql = DB::select("Select UDF_GET_ORG_SCHEMA(?) as db;",[$request->org_id]);
-            if(!$sql){
-              throw new Exception;
-            }
-            $org_schema = $sql[0]->db;
-            $db = Config::get('database.connections.mysql');
-            $db['database'] = $org_schema;
-            config()->set('database.connections.wax', $db);
-
-            $sql = DB::connection('wax')->select("Call USP_RPT_PURCHASE_REGISTER(?,?,?);",[$request->form_date,$request->to_date,$request->party_id]);
-
-            if (empty($sql)) {
-                // Custom validation for no data found
-                return response()->json([
-                    'message' => 'No Data Found',
-                    'details' => null,
-                ], 202);
-            }
-            $purchase_data = [];
-            foreach ($sql as $pur_data) {
-               if(!isset($purchase_data[$pur_data->Id])){
-                $purchase_data[$pur_data->Id]=[
-                    'Id' => $pur_data->Id,
-                    'Purchase_Date' => $pur_data->Pur_Date,
-                    'Purchase_No' => $pur_data->Pur_No,
-                    'Party_Name' => $pur_data->Party_Name,
-                    'Amount' => $pur_data->Tot_Amount,
-                    'Item_Data' => [],
-                ];
-               }
-
-               if(!isset($purchase_data[$pur_data->Id]['Item_Data'][$pur_data->Item_Id])){
-                    $purchase_data[$pur_data->Id]['Item_Data'][] = [
-                        'Item_Id' => $pur_data->Item_Id,
-                        'Item_Name' => $pur_data->Item_Name,
-                        'Qnty' => $pur_data->Item_Qnty,
-                        'Item_Rate' => $pur_data->Item_Rate,
-                    ];
-               }
-
-            }
-            $purchase_data = array_values($purchase_data);
-            return response()->json([
-                'message' => 'Data Found',
-                'details' => $purchase_data,
-            ],200);
-
-        } catch (Exception $ex) {
-            $response = response()->json([
-                'message' => 'Error Found',
-                'details' => $ex->getMessage(),
-            ],400);
-
-            throw new HttpResponseException($response);
-        }
-    }
-
-    public function process_party_ledger(Request $request){
-        try {
-            $sql = DB::select("Select UDF_GET_ORG_SCHEMA(?) as db;",[$request->org_id]);
-            if(!$sql){
-              throw new Exception;
-            }
-            $org_schema = $sql[0]->db;
-            $db = Config::get('database.connections.mysql');
-            $db['database'] = $org_schema;
-            config()->set('database.connections.wax', $db);
-
-            $sql = DB::connection('wax')->select("Call USP_RPT_PARTY_LEDGER(?,?,?);",[$request->form_date,$request->to_date,$request->party_id]);
+            $sql = DB::connection('wax')->select("Call USP_RPT_ACCT_LEDGER(?,?,?);",[$request->form_date,$request->to_date,$request->ledger_id]);
 
             if (empty($sql)) {
                 // Custom validation for no data found
@@ -187,34 +205,9 @@ class ProcessInventoryReport extends Controller
                 ], 202);
             }
             
-            $ledger_data = [];
-            foreach ($sql as $ledg_data) {
-               if(!isset($ledger_data[$ledg_data->Party_Id])){
-                $ledger_data[$ledg_data->Party_Id]=[
-                    'Party_Name' => $ledg_data->Party_Name,
-                    'Party_Add' => $ledg_data->Party_Add,
-                    'Party_Gst' => $ledg_data->Party_Gst,
-                    'Party_Mob' => $ledg_data->Party_Mob,
-                    'Ledger_Data'=>[],
-                ];
-               }
-               
-                if(!isset($ledger_data[$ledg_data->Party_Id]['Ledger_Data'][$ledg_data->Trans_Id])){
-                    $ledger_data[$ledg_data->Party_Id]['Ledger_Data'][] = [
-                        'Trans_Date' => $ledg_data->Trans_Date,
-                        'Particular' => $ledg_data->Particular,
-                        'Debit' => $ledg_data->Dr_Amt,
-                        'Credit' => $ledg_data->Cr_Amt,
-                        'Balance' => $ledg_data->Balance,
-                        'Balance_Type' => $ledg_data->Balance_Type,
-                    ];
-               }
-               
-            }
-            $ledger_data = array_values($ledger_data);
             return response()->json([
                 'message' => 'Data Found',
-                'details' => $ledger_data,
+                'details' => $sql,
             ],200);
 
         } catch (Exception $ex) {

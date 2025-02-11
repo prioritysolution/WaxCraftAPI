@@ -17,6 +17,7 @@ use App\Http\Controllers\Organisation\ProcessMaster;
 use App\Http\Controllers\Organisation\ProcessInventory;
 use App\Http\Controllers\Organisation\ProcessAccounting;
 use App\Http\Controllers\Organisation\ProcessInventoryReport;
+use App\Http\Controllers\Organisation\ProcessAccountingReport;
 
 // User Controller End
 
@@ -183,9 +184,18 @@ Route::group([
     Route::get('/Org/ProcessInventoryReport/OrderBook',[ProcessInventoryReport::class,'process_order_book']);
     Route::get('/Org/ProcessInventoryReport/SalesRegister',[ProcessInventoryReport::class,'process_sales_register']);
     Route::get('/Org/ProcessInventoryReport/PurchaseRegister',[ProcessInventoryReport::class,'process_purchase_register']);
-    Route::get('/Org/ProcessInventoryReport/GetReportParty',[ProcessInventoryReport::class,'']);
+    Route::get('/Org/ProcessInventoryReport/GetPartyLedger',[ProcessInventoryReport::class,'process_party_ledger']);
 
     // End Inventory Report
+
+    // Accounting Report
+
+    Route::get('/Org/ProcessAccountingReport/Daybook',[ProcessAccountingReport::class,'process_daybook']);
+    Route::get('/Org/ProcessAccountingReport/BankLedger',[ProcessAccountingReport::class,'process_bank_ledger']);
+    Route::get('/Org/ProcessAccountingReport/GetLedger/{org_id}',[ProcessAccountingReport::class,'process_ledger']);
+    Route::get('/Org/ProcessAccountingReport/GetAccountLedger',[ProcessAccountingReport::class,'process_acct_ledger']);
+    
+    // End Accounting Report
 });
 
 // User Route Area End Here
