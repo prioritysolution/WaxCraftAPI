@@ -131,7 +131,7 @@ class ProcessUserLogin extends Controller
                     $menu_set[$row->Module_Id] = [
                         "title" => $row->Sub_Module_Name,
                         "Icon" => $row->Icon,
-                        "path" => $row->Page_Alies,
+                        "path" => $row->Main_Page,
                         "childLinks" => []
                     ];
                 }

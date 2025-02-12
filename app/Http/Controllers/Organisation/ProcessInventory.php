@@ -1235,4 +1235,134 @@ class ProcessInventory extends Controller
           throw new HttpResponseException($response);
         }
     }
+
+    public function get_pur_list(Int $org_id){
+        try {
+            $sql = DB::select("Select UDF_GET_ORG_SCHEMA(?) as db;", [$org_id]);
+            if (!$sql) {
+                throw new Exception;
+            }
+            $org_schema = $sql[0]->db;
+            $db = Config::get('database.connections.mysql');
+            $db['database'] = $org_schema;
+            config()->set('database.connections.wax', $db);
+        
+            $sql = DB::connection('wax')->select("Select m.Id,m.Pur_Date,m.Pur_No,UDF_GET_PARTY_NAME(m.Party_Id) Party_Name,(m.Tot_Amt+m.Tot_CGST+m.Tot_SGST+m.Tot_IGST+m.Tot_Round-m.Tot_Discount) Total_Amount,d.Item_Id,UDF_GET_ITEM_NAME(d.Item_Id) Item_Name,d.Item_Qnty,d.Item_Rate,d.Item_Cgst,d.Item_Sgst,d.Item_Igst From trn_purchase_master m Join trn_purchase_details d On d.Pur_Id=m.Id;");
+        
+            if (empty($sql)) {
+                return response()->json([
+                    'message' => 'No Data Found',
+                    'details' => null,
+                ], 202);
+            }
+        
+            $menu_set = [];
+            
+            foreach ($sql as $row) {
+                // Initialize the main order structure
+                if (!isset($menu_set[$row->Id])) {
+                    $menu_set[$row->Id] = [
+                        'Id' => $row->Id,
+                        'Purchase_Date' => $row->Pur_Date,
+                        'Purchase_No' => $row->Pur_No,
+                        'Party_Name' => $row->Party_Name,
+                        'Total_Amount' => $row->Total_Amount,
+                        "ItemRow" => [],
+                    ];
+                }
+        
+                // Add design details to the order
+                if (!isset($menu_set[$row->Id]['ItemRow'][$row->Item_Id])) {
+                    $menu_set[$row->Id]['ItemRow'][] = [
+                        'Item_Id' => $row->Item_Id,
+                        'Item_Name' => $row->Item_Name,
+                        'Item_Qnty' => $row->Item_Qnty,
+                        'Item_Rate' => $row->Item_Rate,
+                        'Item_CGST' => $row->Item_Cgst,
+                        'Item_SGST' => $row->Item_Sgst,
+                        'Item_IGST' => $row->Item_Igst,
+                    ];
+                }
+            }
+        
+            $menu_set = array_values($menu_set);
+        
+            return response()->json([
+                'message' => 'Data Found',
+                'details' => $menu_set,
+            ], 200);
+        
+        } catch (Exception $ex) {
+            $response = response()->json([
+                'message' => 'Error Found',
+                'details' => $ex->getMessage(),
+            ], 400);
+        
+            throw new HttpResponseException($response);
+        }
+    }
+
+    public function cancel_purchase(Request $request){
+        $validator = Validator::make($request->all(),[
+            'org_id' =>'required',
+            'pur_id' => 'required'
+        ]);
+        if($validator->passes()){
+            try {
+
+                $sql = DB::select("Select UDF_GET_ORG_SCHEMA(?) as db;",[$request->org_id]);
+                if(!$sql){
+                throw new Exception;
+                }
+                $org_schema = $sql[0]->db;
+                $db = Config::get('database.connections.mysql');
+                $db['database'] = $org_schema;
+                config()->set('database.connections.wax', $db);
+                DB::connection('wax')->beginTransaction();
+
+                $sql = DB::connection('wax')->statement("Call USP_ADD_EDIT_PURCHASE(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,@error,@message);",[$request->pur_id,null,null,null,null,null,null,null,null,null,null,null,null,auth()->user()->Id,2]);
+
+                if(!$sql){
+                    throw new Exception;
+                }
+                $result = DB::connection('wax')->select("Select @error As Error_No,@message As Message,@sale_id As Sales_Id;");
+                $error_No = $result[0]->Error_No;
+                $message = $result[0]->Message;
+    
+                if($error_No<0){
+                    DB::connection('wax')->rollBack();
+                    return response()->json([
+                        'message' => $message,
+                        'details' => null,
+                    ],202);
+                }
+                else{
+                    DB::connection('wax')->commit();
+                    return response()->json([
+                        'message' => 'Purchase Voucher Is Canceled Successfully !!',
+                        'details' => null,
+                    ],200);
+                }
+
+            } catch (Exception $ex) {
+                DB::rollBack(); 
+                $response = response()->json([
+                    'message' => $ex->getMessage(),
+                    'details' => null,
+                ],400);
+    
+                throw new HttpResponseException($response);
+            }
+        }
+        else{
+            $errors = $validator->errors();
+
+            $response = response()->json([
+              'message' => $errors->messages(),
+              'details' => null,
+          ],202);
+      
+          throw new HttpResponseException($response);
+        }
+    }
 }

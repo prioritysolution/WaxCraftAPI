@@ -128,8 +128,6 @@ class ProcessAccountingReport extends Controller
                     ];
                }
                }
-                
-               
             }
            
             $bank_data = array_values($bank_data);
@@ -208,6 +206,78 @@ class ProcessAccountingReport extends Controller
             return response()->json([
                 'message' => 'Data Found',
                 'details' => $sql,
+            ],200);
+
+        } catch (Exception $ex) {
+            $response = response()->json([
+                'message' => 'Error Found',
+                'details' => $ex->getMessage(),
+            ],400);
+
+            throw new HttpResponseException($response);
+        }
+    }
+
+    public function process_cashbook(Request $request){
+        try {
+            $sql = DB::select("Select UDF_GET_ORG_SCHEMA(?) as db;",[$request->org_id]);
+            if(!$sql){
+              throw new Exception;
+            }
+            $org_schema = $sql[0]->db;
+            $db = Config::get('database.connections.mysql');
+            $db['database'] = $org_schema;
+            config()->set('database.connections.wax', $db);
+
+            $sql = DB::connection('wax')->select("Call USP_RPT_CASH_BOOK(?);",[$request->date]);
+
+            if (empty($sql)) {
+                // Custom validation for no data found
+                return response()->json([
+                    'message' => 'No Data Found',
+                    'details' => null,
+                ], 202);
+            }
+            $cashbook_data = [];
+           
+            foreach ($sql as $cashbook) {
+                if($cashbook->Opening_Balance){
+                    $cashbook_data['Opening_Balance']=[
+                        'Opening_Cash' => $cashbook->Opening_Balance,
+                        'Receipt_Data' => [],
+                        'Payment_Data'=>[],
+                        'Closing_Cash'=>'',
+                    ];
+                }
+
+                if($cashbook->Rec_Vouch_No){
+                    $cashbook_data['Opening_Balance']['Receipt_Data'][]=[
+                        'Vouch_No' => $cashbook->Rec_Vouch_No,
+                        'Manual_Voucher' =>$cashbook->Rec_Vouch_No,
+                        'Ledger_Name' => $cashbook->Ledger_Name,
+                        'Particular' => $cashbook->Rec_Particular,
+                        'Amount' => $cashbook->Rec_Amount,
+                    ];
+                }
+
+                if($cashbook->Pay_Particular){
+                    $cashbook_data['Opening_Balance']['Payment_Data'][]=[
+                        'Vouch_No' => $cashbook->Rec_Vouch_No,
+                        'Manual_Voucher' =>$cashbook->Rec_Vouch_No,
+                        'Ledger_Name' => $cashbook->Ledger_Name,
+                        'Particular' => $cashbook->Pay_Particular,
+                        'Amount' => $cashbook->Pay_Amount,
+                    ];
+                }
+
+                 if($cashbook->Closing_Balance){
+                    $cashbook_data['Opening_Balance']['Closing_Cash']=$cashbook->Closing_Balance;
+                }
+            }
+            $cashbook_data = array_values($cashbook_data);
+            return response()->json([
+                'message' => 'Data Found',
+                'details' => $cashbook_data,
             ],200);
 
         } catch (Exception $ex) {

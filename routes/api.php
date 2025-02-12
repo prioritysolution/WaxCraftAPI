@@ -154,6 +154,8 @@ Route::group([
     Route::get('/Org/ProcessInventory/InvoiseList/{org_id}',[ProcessInventory::class,'get_invoise_list']);
     Route::get('/Org/ProcessInventory/GetPurchaseParty/{org_id}',[ProcessInventory::class,'get_pur_party_list']);
     Route::post('/Org/ProcessInventory/PostPurchase',[ProcessInventory::class,'process_purchase']);
+    Route::get('/Org/ProcessInventory/GetPurchaseList/{org_id}',[ProcessInventory::class,'get_pur_list']);
+    Route::put('/Org/ProcessInventory/CancelPurchase',[ProcessInventory::class,'cancel_purchase']);
     // Inventory Voucher Route End
 
     // Accounting Voucher Route Start
@@ -194,7 +196,7 @@ Route::group([
     Route::get('/Org/ProcessAccountingReport/BankLedger',[ProcessAccountingReport::class,'process_bank_ledger']);
     Route::get('/Org/ProcessAccountingReport/GetLedger/{org_id}',[ProcessAccountingReport::class,'process_ledger']);
     Route::get('/Org/ProcessAccountingReport/GetAccountLedger',[ProcessAccountingReport::class,'process_acct_ledger']);
-    
+    Route::get('/Org/ProcessAccountingReport/CashBook',[ProcessAccountingReport::class,'process_cashbook']);
     // End Accounting Report
 });
 
