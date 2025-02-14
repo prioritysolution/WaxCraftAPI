@@ -41,4 +41,17 @@ trait ImageUpload
         return $root_path;
     }
 
+    public function getLogo($img_name){
+        $file_name = $img_name===null ? 'null' : $img_name;
+        $file_path = 'logo/'.$file_name;
+        if(Storage::disk('public')->exists($file_path)){
+            $root_path = url('storage/'.$file_path);
+        }
+        else{
+            $root_path=url('storage/design/no-img.png'); 
+        }
+        
+        return $root_path;
+    }
+
 }

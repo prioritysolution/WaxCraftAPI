@@ -52,6 +52,7 @@ Route::get('/Admin/LogOut',[AdminLogin::class,'process_logout']);
 
 Route::post('/Admin/ProcessOrganisation/AddOrg',[ProcessOrganisation::class,'process_org']);
 Route::get('/Admin/ProcessOrganisation/OrgList',[ProcessOrganisation::class,'get_org_list']);
+Route::post('/Admin/ProcessOrganisation/UpdateOrganisation',[ProcessOrganisation::class,'update_organisation']);
 Route::get('/Admin/ProcessOrganisation/GetOrgModule',[ProcessOrganisation::class,'get_org_module']);
 Route::get('/Admin/ProcessOrganisation/GetActiveModule/{org_id}',[ProcessOrganisation::class,'get_org_active_module']);
 Route::post('/Admin/ProcessOrganisation/MapModule',[ProcessOrganisation::class,'process_org_module']);
@@ -80,6 +81,10 @@ Route::group([
     // Dashboard Route
 
     Route::get('/Org/GetSidebar/{org_id}',[ProcessUserLogin::class,'get_user_sidebar']);
+    Route::get('/Org/GetUserProfile',[ProcessUserLogin::class,'get_user_profile']);
+    Route::put('/Org/UpdateUserProfile',[ProcessUserLogin::class,'update_user_profile']);
+    Route::get('/Org/GetUserRele',[ProcessUserLogin::class,'get_user_role']);
+    Route::post('/Org/AddUser',[ProcessUserLogin::class,'process_user']);
     Route::get('/Org/LogOut',[ProcessUserLogin::class,'process_logout']);
 
     // End Dashboard Route
