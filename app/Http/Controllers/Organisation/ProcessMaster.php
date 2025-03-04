@@ -109,38 +109,54 @@ class ProcessMaster extends Controller
     } 
     }
 
-    public function get_catagory_list(Int $org_id){
+    public function get_catagory_list(Request $request){
         try {
-            $sql = DB::select("Select UDF_GET_ORG_SCHEMA(?) as db;",[$org_id]);
-            if(!$sql){
-              throw new Exception;
+            $sql = DB::select("Select UDF_GET_ORG_SCHEMA(?) as db;", [$request->org_id]);
+        
+            if (!$sql) {
+                throw new Exception("Organization schema not found");
             }
+        
             $org_schema = $sql[0]->db;
             $db = Config::get('database.connections.mysql');
             $db['database'] = $org_schema;
             config()->set('database.connections.wax', $db);
-
-            $sql = DB::connection('wax')->select("Select Id,Cat_Name From mst_item_catagary Order By Id");
-
-            if (empty($sql)) {
-                // Custom validation for no data found
+        
+            // Get paginated results
+            $perPage = request()->get('per_page', 10); // Default 10 per page
+            $keyword = $request->get('keyword', '');
+        
+            $query = DB::connection('wax')
+                ->table('mst_item_catagary')
+                ->select('Id', 'Cat_Name')
+                ->orderBy('Id');
+        
+            if (!empty($keyword)) {
+                $query->where("Cat_Name", 'LIKE', "%{$keyword}%");
+            }
+        
+            // Store paginated result in a variable
+            $paginatedData = $query->paginate($perPage);
+        
+            // Correct way to check if data exists
+            if ($paginatedData->isEmpty()) {
                 return response()->json([
                     'message' => 'No Data Found',
                     'details' => null,
                 ], 202);
             }
-
+        
             return response()->json([
                 'message' => 'Data Found',
-                'details' => $sql,
-            ],200);
-
+                'details' => $paginatedData,
+            ], 200);
+        
         } catch (Exception $ex) {
             $response = response()->json([
                 'message' => 'Error Found',
                 'details' => $ex->getMessage(),
-            ],400);
-
+            ], 400);
+        
             throw new HttpResponseException($response);
         }
     }
@@ -274,45 +290,59 @@ class ProcessMaster extends Controller
     }  
     }
 
-    public function get_model_list(Int $org_id){
+    public function get_model_list(Request $request){
         try {
-            $sql = DB::select("Select UDF_GET_ORG_SCHEMA(?) as db;",[$org_id]);
-            if(!$sql){
-              throw new Exception;
+            $sql = DB::select("Select UDF_GET_ORG_SCHEMA(?) as db;", [$request->org_id]);
+        
+            if (!$sql) {
+                throw new Exception("Organization schema not found");
             }
+        
             $org_schema = $sql[0]->db;
             $db = Config::get('database.connections.mysql');
             $db['database'] = $org_schema;
             config()->set('database.connections.wax', $db);
-
-            $sql = DB::connection('wax')->select("Select m.Id,m.Model_Name,m.Model_Sh_Name,m.Cat_Id,c.Cat_Name From mst_item_model m Join mst_item_catagary c On c.Id=m.Cat_Id;");
-
-            if (empty($sql)) {
-                // Custom validation for no data found
+        
+            // Get pagination and filtering parameters
+            $perPage = request()->get('per_page', 10); // Default 10 per page
+        
+            // Use query builder instead of DB::select()
+            $query = DB::connection('wax')
+                ->table('mst_item_model as m')
+                ->join('mst_item_catagary as c', 'c.Id', '=', 'm.Cat_Id')
+                ->select('m.Id', 'm.Model_Name', 'm.Model_Sh_Name', 'm.Cat_Id', 'c.Cat_Name')
+                ->orderBy('m.Id');
+        
+        
+            // Get paginated results
+            $paginatedData = $query->paginate($perPage);
+        
+            // Check if there is data
+            if ($paginatedData->isEmpty()) {
                 return response()->json([
                     'message' => 'No Data Found',
                     'details' => null,
                 ], 202);
             }
-
+        
             return response()->json([
                 'message' => 'Data Found',
-                'details' => $sql,
-            ],200);
-
+                'details' => $paginatedData,
+            ], 200);
+        
         } catch (Exception $ex) {
             $response = response()->json([
                 'message' => 'Error Found',
                 'details' => $ex->getMessage(),
-            ],400);
-
+            ], 400);
+        
             throw new HttpResponseException($response);
         }
     }
 
-    public function get_catagory_model(Int $org_id,Int $cat_id){
+    public function get_catagory_model(Request $request){
         try {
-            $sql = DB::select("Select UDF_GET_ORG_SCHEMA(?) as db;",[$org_id]);
+            $sql = DB::select("Select UDF_GET_ORG_SCHEMA(?) as db;",[$request->org_id]);
             if(!$sql){
               throw new Exception;
             }
@@ -321,7 +351,7 @@ class ProcessMaster extends Controller
             $db['database'] = $org_schema;
             config()->set('database.connections.wax', $db);
 
-            $sql = DB::connection('wax')->select("Select Id,Model_Name,Model_Sh_Name From mst_item_model Where Cat_Id=?;",[$cat_id]);
+            $sql = DB::connection('wax')->select("Select Id,Model_Name,Model_Sh_Name From mst_item_model Where Cat_Id=?;",[$request->cat_id]);
 
             if (empty($sql)) {
                 // Custom validation for no data found
@@ -477,45 +507,55 @@ class ProcessMaster extends Controller
     } 
     }
 
-    public function get_size_list(Int $org_id){
+    public function get_size_list(Request $request){
         try {
-            $sql = DB::select("Select UDF_GET_ORG_SCHEMA(?) as db;",[$org_id]);
-            if(!$sql){
-              throw new Exception;
+            $sql = DB::select("Select UDF_GET_ORG_SCHEMA(?) as db;", [$request->org_id]);
+            if (!$sql) {
+                throw new Exception;
             }
+        
             $org_schema = $sql[0]->db;
             $db = Config::get('database.connections.mysql');
             $db['database'] = $org_schema;
             config()->set('database.connections.wax', $db);
-
-            $sql = DB::connection('wax')->select("Select m.Id,m.Cat_Id,m.Mod_Id,m.Size_Name,c.Cat_Name,md.Model_Sh_Name From mst_item_size m Join mst_item_catagary c On c.Id=m.Cat_Id Join mst_item_model md On md.Id=m.Mod_Id;");
-
-            if (empty($sql)) {
-                // Custom validation for no data found
+        
+            // Get per_page, page, and filter from request
+            $perPage = $request->per_page ?? 10; // Default 10 per page
+            $page = $request->page ?? 1;
+        
+            $query = DB::connection('wax')->table('mst_item_size as m')
+                ->join('mst_item_catagary as c', 'c.Id', '=', 'm.Cat_Id')
+                ->join('mst_item_model as md', 'md.Id', '=', 'm.Mod_Id')
+                ->select('m.Id', 'm.Cat_Id', 'm.Mod_Id', 'm.Size_Name', 'c.Cat_Name', 'md.Model_Sh_Name');
+        
+            // Apply pagination
+            $sql = $query->paginate($perPage, ['*'], 'page', $page);
+        
+            if ($sql->isEmpty()) {
                 return response()->json([
                     'message' => 'No Data Found',
                     'details' => null,
                 ], 202);
             }
-
+        
             return response()->json([
                 'message' => 'Data Found',
                 'details' => $sql,
-            ],200);
-
+            ], 200);
+        
         } catch (Exception $ex) {
             $response = response()->json([
                 'message' => 'Error Found',
                 'details' => $ex->getMessage(),
-            ],400);
-
+            ], 400);
+        
             throw new HttpResponseException($response);
         }
     }
 
-    public function get_module_size(Int $org_id,Int $mod_id){
+    public function get_module_size(Request $request){
         try {
-            $sql = DB::select("Select UDF_GET_ORG_SCHEMA(?) as db;",[$org_id]);
+            $sql = DB::select("Select UDF_GET_ORG_SCHEMA(?) as db;",[$request->org_id]);
             if(!$sql){
               throw new Exception;
             }
@@ -524,7 +564,7 @@ class ProcessMaster extends Controller
             $db['database'] = $org_schema;
             config()->set('database.connections.wax', $db);
 
-            $sql = DB::connection('wax')->select("Select Id,Size_Name From mst_item_size Where Mod_Id=?;",[$mod_id]);
+            $sql = DB::connection('wax')->select("Select Id,Size_Name From mst_item_size Where Mod_Id=?;",[$request->model_id]);
 
             if (empty($sql)) {
                 // Custom validation for no data found
@@ -678,9 +718,9 @@ class ProcessMaster extends Controller
     }  
     }
 
-    public function get_unit_list(Int $org_id){
+    public function get_unit_list(Request $request){
         try {
-            $sql = DB::select("Select UDF_GET_ORG_SCHEMA(?) as db;",[$org_id]);
+            $sql = DB::select("Select UDF_GET_ORG_SCHEMA(?) as db;",[$request->org_id]);
             if(!$sql){
               throw new Exception;
             }
@@ -844,9 +884,9 @@ class ProcessMaster extends Controller
     }
     }
 
-    public function get_size_color_list(Int $org_id){
+    public function get_size_color_list(Request $request){
         try {
-            $sql = DB::select("Select UDF_GET_ORG_SCHEMA(?) as db;",[$org_id]);
+            $sql = DB::select("Select UDF_GET_ORG_SCHEMA(?) as db;",[$request->org_id]);
             if(!$sql){
               throw new Exception;
             }
@@ -880,9 +920,9 @@ class ProcessMaster extends Controller
         }
     }
 
-    public function get_size_wise_color(Int $org_id,Int $size_id){
+    public function get_size_wise_color(Request $request){
         try {
-            $sql = DB::select("Select UDF_GET_ORG_SCHEMA(?) as db;",[$org_id]);
+            $sql = DB::select("Select UDF_GET_ORG_SCHEMA(?) as db;",[$request->org_id]);
             if(!$sql){
               throw new Exception;
             }
@@ -891,7 +931,7 @@ class ProcessMaster extends Controller
             $db['database'] = $org_schema;
             config()->set('database.connections.wax', $db);
 
-            $sql = DB::connection('wax')->select("Select Id,Color_Name From mst_size_color Where Size_Id=?;",[$size_id]);
+            $sql = DB::connection('wax')->select("Select Id,Color_Name From mst_size_color Where Size_Id=?;",[$request->size_id]);
 
             if (empty($sql)) {
                 // Custom validation for no data found
@@ -983,38 +1023,52 @@ class ProcessMaster extends Controller
     }
     }
 
-    public function get_account_head(Int $org_id){
+    public function get_account_head(Request $request){
         try {
-            $sql = DB::select("Select UDF_GET_ORG_SCHEMA(?) as db;",[$org_id]);
-            if(!$sql){
-              throw new Exception;
+            $sql = DB::select("Select UDF_GET_ORG_SCHEMA(?) as db;", [$request->org_id]);
+            if (!$sql) {
+                throw new Exception;
             }
+        
             $org_schema = $sql[0]->db;
             $db = Config::get('database.connections.mysql');
             $db['database'] = $org_schema;
             config()->set('database.connections.wax', $db);
-
-            $sql = DB::connection('wax')->select("Select Id,Head_Name From mst_org_acct_head;");
-
-            if (empty($sql)) {
-                // Custom validation for no data found
+        
+            // Get per_page, page, and filter from request
+            $perPage = $request->per_page ?? 10; // Default 10 per page
+            $page = $request->page ?? 1;
+            $headName = $request->keyword ?? null; // Filter value
+        
+            $query = DB::connection('wax')->table('mst_org_acct_head')
+                ->select('Id', 'Head_Name');
+        
+            // Apply filter if head_name is provided
+            if (!empty($headName)) {
+                $query->where('Head_Name', 'LIKE', "%$headName%");
+            }
+        
+            // Apply pagination
+            $sql = $query->paginate($perPage, ['*'], 'page', $page);
+        
+            if ($sql->isEmpty()) {
                 return response()->json([
                     'message' => 'No Data Found',
                     'details' => null,
                 ], 202);
             }
-
+        
             return response()->json([
                 'message' => 'Data Found',
                 'details' => $sql,
-            ],200);
-
+            ], 200);
+        
         } catch (Exception $ex) {
             $response = response()->json([
                 'message' => 'Error Found',
                 'details' => $ex->getMessage(),
-            ],400);
-
+            ], 400);
+        
             throw new HttpResponseException($response);
         }
     }
@@ -1083,38 +1137,53 @@ class ProcessMaster extends Controller
     }
     }
 
-    public function get_acct_head_list(Int $org_id){
+    public function get_acct_head_list(Request $request){
         try {
-            $sql = DB::select("Select UDF_GET_ORG_SCHEMA(?) as db;",[$org_id]);
-            if(!$sql){
-              throw new Exception;
+            $sql = DB::select("Select UDF_GET_ORG_SCHEMA(?) as db;", [$request->org_id]);
+            if (!$sql) {
+                throw new Exception;
             }
+        
             $org_schema = $sql[0]->db;
             $db = Config::get('database.connections.mysql');
             $db['database'] = $org_schema;
             config()->set('database.connections.wax', $db);
-
-            $sql = DB::connection('wax')->select("Select m.Id,m.Head_Id As Main_Head,m.Sub_Head_Name,h.Head_Name From mst_org_acct_sub_head m Join mst_org_acct_head h On h.Id=m.Head_Id;");
-
-            if (empty($sql)) {
-                // Custom validation for no data found
+        
+            // Get per_page, page, and filter from request
+            $perPage = $request->per_page ?? 10; // Default 10 per page
+            $page = $request->page ?? 1;
+            $subHeadName = $request->keyword ?? null; // Filter value
+        
+            $query = DB::connection('wax')->table('mst_org_acct_sub_head as m')
+                ->join('mst_org_acct_head as h', 'h.Id', '=', 'm.Head_Id')
+                ->select('m.Id', 'm.Head_Id as Main_Head', 'm.Sub_Head_Name', 'h.Head_Name');
+        
+            // Apply filter if sub_head_name is provided
+            if (!empty($subHeadName)) {
+                $query->where('m.Sub_Head_Name', 'LIKE', "%$subHeadName%");
+            }
+        
+            // Apply pagination
+            $sql = $query->paginate($perPage, ['*'], 'page', $page);
+        
+            if ($sql->isEmpty()) {
                 return response()->json([
                     'message' => 'No Data Found',
                     'details' => null,
                 ], 202);
             }
-
+        
             return response()->json([
                 'message' => 'Data Found',
                 'details' => $sql,
-            ],200);
-
+            ], 200);
+        
         } catch (Exception $ex) {
             $response = response()->json([
                 'message' => 'Error Found',
                 'details' => $ex->getMessage(),
-            ],400);
-
+            ], 400);
+        
             throw new HttpResponseException($response);
         }
     }
@@ -1248,40 +1317,55 @@ class ProcessMaster extends Controller
     }
     }
 
-    public function get_acct_ledger_list(Int $org_id){
+    public function get_acct_ledger_list(Request $request){
         try {
-            $sql = DB::select("Select UDF_GET_ORG_SCHEMA(?) as db;",[$org_id]);
-            if(!$sql){
-              throw new Exception;
+            $sql = DB::select("Select UDF_GET_ORG_SCHEMA(?) as db;", [$request->org_id]);
+            if (!$sql) {
+                throw new Exception("Organization schema not found.");
             }
+        
             $org_schema = $sql[0]->db;
-            $db = Config::get('database.connections.mysql');
+            $db = config('database.connections.mysql');
             $db['database'] = $org_schema;
             config()->set('database.connections.wax', $db);
-
-            $sql = DB::connection('wax')->select("Select Id,Head_Id,Sub_Head,Ledger_Name,Open_Balance From mst_org_acct_ledger;");
-
-            if (empty($sql)) {
-                // Custom validation for no data found
+        
+            // Get pagination and filter parameters
+            $perPage = $request->per_page ?? 10; // Default: 10 per page
+            $page = $request->page ?? 1;
+            $ledgerName = $request->keyword ?? null; // Filter value
+        
+            // Query with optional filtering
+            $query = DB::connection('wax')->table('mst_org_acct_ledger')
+                ->select('Id', 'Head_Id', 'Sub_Head', 'Ledger_Name', 'Open_Balance');
+        
+            // Apply filter if ledger_name is provided
+            if (!empty($ledgerName)) {
+                $query->where('Ledger_Name', 'LIKE', "%$ledgerName%");
+            }
+        
+            // Apply pagination
+            $sql = $query->paginate($perPage, ['*'], 'page', $page);
+        
+            if ($sql->isEmpty()) {
                 return response()->json([
                     'message' => 'No Data Found',
                     'details' => null,
                 ], 202);
             }
-
+        
             return response()->json([
                 'message' => 'Data Found',
                 'details' => $sql,
-            ],200);
-
+            ], 200);
+        
         } catch (Exception $ex) {
             $response = response()->json([
                 'message' => 'Error Found',
                 'details' => $ex->getMessage(),
-            ],400);
-
+            ], 400);
+        
             throw new HttpResponseException($response);
-        }   
+        }
     }
 
     public function update_acct_ledger(Request $request){
@@ -1349,80 +1433,136 @@ class ProcessMaster extends Controller
     }
     }
 
-    public function get_purchase_ledger(Int $org_id){
+    public function get_purchase_ledger(Request $request){
         try {
-            $sql = DB::select("Select UDF_GET_ORG_SCHEMA(?) as db;",[$org_id]);
-            if(!$sql){
-              throw new Exception;
+            $sql = DB::select("Select UDF_GET_ORG_SCHEMA(?) as db;", [$request->org_id]);
+            if (!$sql) {
+                throw new Exception("Organization schema not found.");
             }
+        
             $org_schema = $sql[0]->db;
-            $db = Config::get('database.connections.mysql');
+            $db = config('database.connections.mysql');
             $db['database'] = $org_schema;
             config()->set('database.connections.wax', $db);
-
-            $sql = DB::connection('wax')->select("Select Id,Ledger_Name From mst_org_acct_ledger Where Head_Id=13
-                                                Union ALl
-                                                Select Id,Ledger_Name From mst_org_acct_ledger Where Sub_Head In(Select Id From mst_org_acct_sub_head Where Head_Id=13);");
-
-            if (empty($sql)) {
-                // Custom validation for no data found
+        
+            // Get pagination and filter parameters
+            $perPage = $request->per_page ?? 10; // Default: 10 per page
+            $page = $request->page ?? 1;
+            $ledgerName = $request->keyword ?? null; // Filter value
+        
+            // Query for ledgers where Head_Id = 13
+            $query1 = DB::connection('wax')->table('mst_org_acct_ledger')
+                ->select('Id', 'Ledger_Name')
+                ->where('Head_Id', 13);
+        
+            // Query for ledgers where Sub_Head is in the subquery
+            $query2 = DB::connection('wax')->table('mst_org_acct_ledger')
+                ->select('Id', 'Ledger_Name')
+                ->whereIn('Sub_Head', function ($subquery) {
+                    $subquery->select('Id')
+                        ->from('mst_org_acct_sub_head')
+                        ->where('Head_Id', 13);
+                });
+        
+            // Combine the queries using Union
+            $query = $query1->unionAll($query2);
+        
+            // Apply filter if ledger_name is provided
+            if (!empty($ledgerName)) {
+                $query->where('Ledger_Name', 'LIKE', "%$ledgerName%");
+            }
+        
+            // Apply pagination
+            $sql = DB::connection('wax')->table(DB::raw("({$query->toSql()}) as combined_query"))
+                ->mergeBindings($query) // Bind parameters
+                ->paginate($perPage, ['*'], 'page', $page);
+        
+            if ($sql->isEmpty()) {
                 return response()->json([
                     'message' => 'No Data Found',
                     'details' => null,
                 ], 202);
             }
-
+        
             return response()->json([
                 'message' => 'Data Found',
                 'details' => $sql,
-            ],200);
-
+            ], 200);
+        
         } catch (Exception $ex) {
             $response = response()->json([
                 'message' => 'Error Found',
                 'details' => $ex->getMessage(),
-            ],400);
-
+            ], 400);
+        
             throw new HttpResponseException($response);
-        }  
+        }
     }
 
-    public function get_sales_ledger(Int $org_id){
+    public function get_sales_ledger(Request $request){
         try {
-            $sql = DB::select("Select UDF_GET_ORG_SCHEMA(?) as db;",[$org_id]);
-            if(!$sql){
-              throw new Exception;
+            $sql = DB::select("Select UDF_GET_ORG_SCHEMA(?) as db;", [$request->org_id]);
+            if (!$sql) {
+                throw new Exception("Organization schema not found.");
             }
+        
             $org_schema = $sql[0]->db;
-            $db = Config::get('database.connections.mysql');
+            $db = config('database.connections.mysql');
             $db['database'] = $org_schema;
             config()->set('database.connections.wax', $db);
-
-            $sql = DB::connection('wax')->select("Select Id,Ledger_Name From mst_org_acct_ledger Where Head_Id=14
-                                                Union ALl
-                                                Select Id,Ledger_Name From mst_org_acct_ledger Where Sub_Head In(Select Id From mst_org_acct_sub_head Where Head_Id=14);");
-
-            if (empty($sql)) {
-                // Custom validation for no data found
+        
+            // Get pagination and filter parameters
+            $perPage = $request->per_page ?? 10; // Default: 10 per page
+            $page = $request->page ?? 1;
+            $ledgerName = $request->keyword ?? null; // Filter value
+        
+            // Query for ledgers where Head_Id = 13
+            $query1 = DB::connection('wax')->table('mst_org_acct_ledger')
+                ->select('Id', 'Ledger_Name')
+                ->where('Head_Id', 14);
+        
+            // Query for ledgers where Sub_Head is in the subquery
+            $query2 = DB::connection('wax')->table('mst_org_acct_ledger')
+                ->select('Id', 'Ledger_Name')
+                ->whereIn('Sub_Head', function ($subquery) {
+                    $subquery->select('Id')
+                        ->from('mst_org_acct_sub_head')
+                        ->where('Head_Id', 14);
+                });
+        
+            // Combine the queries using Union
+            $query = $query1->unionAll($query2);
+        
+            // Apply filter if ledger_name is provided
+            if (!empty($ledgerName)) {
+                $query->where('Ledger_Name', 'LIKE', "%$ledgerName%");
+            }
+        
+            // Apply pagination
+            $sql = DB::connection('wax')->table(DB::raw("({$query->toSql()}) as combined_query"))
+                ->mergeBindings($query) // Bind parameters
+                ->paginate($perPage, ['*'], 'page', $page);
+        
+            if ($sql->isEmpty()) {
                 return response()->json([
                     'message' => 'No Data Found',
                     'details' => null,
                 ], 202);
             }
-
+        
             return response()->json([
                 'message' => 'Data Found',
                 'details' => $sql,
-            ],200);
-
+            ], 200);
+        
         } catch (Exception $ex) {
             $response = response()->json([
                 'message' => 'Error Found',
                 'details' => $ex->getMessage(),
-            ],400);
-
+            ], 400);
+        
             throw new HttpResponseException($response);
-        } 
+        }
     }
 
     public function process_item(Request $request){
@@ -1501,40 +1641,66 @@ class ProcessMaster extends Controller
     }
     }
 
-    public function get_item_list(Int $org_id){
+    public function get_item_list(Request $request){
         try {
-            $sql = DB::select("Select UDF_GET_ORG_SCHEMA(?) as db;",[$org_id]);
-            if(!$sql){
-              throw new Exception;
+            $sql = DB::select("Select UDF_GET_ORG_SCHEMA(?) as db;", [$request->org_id]);
+            if (!$sql) {
+                throw new Exception("Organization schema not found.");
             }
+        
             $org_schema = $sql[0]->db;
-            $db = Config::get('database.connections.mysql');
+            $db = config('database.connections.mysql');
             $db['database'] = $org_schema;
             config()->set('database.connections.wax', $db);
-
-            $sql = DB::connection('wax')->select("Select m.Id,m.Cat_Id,m.Model_Id,m.Size_Id,m.Color_Id,m.Item_Name,m.Item_Sh_Name,m.Unit_Id,m.Purchase_Gl,m.Sales_Gl,m.CGST,m.SGST,m.IGST,m.Pur_Rate,m.Sale_Rate,c.Cat_Name,(Select Intem_Qnty From mst_item_stock Where Item_Id=m.Id And Event_Type='OB') As Open_Qnty,(Select Item_Rate From mst_item_stock Where Item_Id=m.Id And Event_Type='OB') As Item_Rate From mst_item_master m Join mst_item_catagary c On c.Id=m.Cat_Id;");
-
-            if (empty($sql)) {
-                // Custom validation for no data found
+        
+            // Get pagination and filter parameters
+            $perPage = $request->per_page ?? 10; // Default: 10 per page
+            $page = $request->page ?? 1;
+            $searchTerm = $request->keyword ?? null; // Filter value for Item_Name or Item_Sh_Name
+        
+            // Query builder
+            $query = DB::connection('wax')->table('mst_item_master as m')
+                ->select(
+                    'm.Id', 'm.Cat_Id', 'm.Model_Id', 'm.Size_Id', 'm.Color_Id', 
+                    'm.Item_Name', 'm.Item_Sh_Name', 'm.Unit_Id', 'm.Purchase_Gl', 
+                    'm.Sales_Gl', 'm.CGST', 'm.SGST', 'm.IGST', 'm.Pur_Rate', 'm.Sale_Rate',
+                    'c.Cat_Name',
+                    DB::raw("(SELECT Intem_Qnty FROM mst_item_stock WHERE Item_Id = m.Id AND Event_Type = 'OB') AS Open_Qnty"),
+                    DB::raw("(SELECT Item_Rate FROM mst_item_stock WHERE Item_Id = m.Id AND Event_Type = 'OB') AS Item_Rate")
+                )
+                ->join('mst_item_catagary as c', 'c.Id', '=', 'm.Cat_Id');
+        
+            // Apply search filter if provided
+            if (!empty($searchTerm)) {
+                $query->where(function ($q) use ($searchTerm) {
+                    $q->where('m.Item_Name', 'LIKE', "%$searchTerm%")
+                      ->orWhere('m.Item_Sh_Name', 'LIKE', "%$searchTerm%");
+                });
+            }
+        
+            // Apply pagination
+            $sql = $query->paginate($perPage, ['*'], 'page', $page);
+        
+            if ($sql->isEmpty()) {
                 return response()->json([
                     'message' => 'No Data Found',
                     'details' => null,
                 ], 202);
             }
-
+        
             return response()->json([
                 'message' => 'Data Found',
                 'details' => $sql,
-            ],200);
-
+            ], 200);
+        
         } catch (Exception $ex) {
             $response = response()->json([
                 'message' => 'Error Found',
                 'details' => $ex->getMessage(),
-            ],400);
-
+            ], 400);
+        
             throw new HttpResponseException($response);
-        } 
+        }
     }
 
     public function update_item(Request $request){
@@ -1614,9 +1780,9 @@ class ProcessMaster extends Controller
     }
     }
 
-    public function get_party_ledger(Int $org_id,Int $type){
+    public function get_party_ledger(Request $request){
         try {
-            $sql = DB::select("Select UDF_GET_ORG_SCHEMA(?) as db;",[$org_id]);
+            $sql = DB::select("Select UDF_GET_ORG_SCHEMA(?) as db;",[$request->org_id]);
             if(!$sql){
               throw new Exception;
             }
@@ -1625,7 +1791,7 @@ class ProcessMaster extends Controller
             $db['database'] = $org_schema;
             config()->set('database.connections.wax', $db);
             $head_id=0;
-            switch ($type) {
+            switch ($request->type) {
                 case 1:
                     $head_id = 7;
                     break;
@@ -1730,40 +1896,63 @@ class ProcessMaster extends Controller
     }
     }
 
-    public function get_party_list(Int $org_id){
+    public function get_party_list(Request $request){
         try {
-            $sql = DB::select("Select UDF_GET_ORG_SCHEMA(?) as db;",[$org_id]);
-            if(!$sql){
-              throw new Exception;
+            $sql = DB::select("Select UDF_GET_ORG_SCHEMA(?) as db;", [$request->org_id]);
+            if (!$sql) {
+                throw new Exception("Organization schema not found.");
             }
+        
             $org_schema = $sql[0]->db;
-            $db = Config::get('database.connections.mysql');
+            $db = config('database.connections.mysql');
             $db['database'] = $org_schema;
             config()->set('database.connections.wax', $db);
-
-            $sql = DB::connection('wax')->select("Select Id,Case When Party_Type=1 Then 'Debtor' When Party_Type=2 Then 'Creditor' End As Party_Tp,Party_Type,Party_Name,Party_Add,Party_Mob,Party_Mail,Party_Gst,Ledger_Id,Open_Bal From mst_party_master;");
-
-            if (empty($sql)) {
-                // Custom validation for no data found
+        
+            // Get pagination and filter parameters
+            $perPage = $request->per_page ?? 10; // Default: 10 per page
+            $page = $request->page ?? 1;
+            $searchTerm = $request->keyword ?? null; // Filter value for Party_Name
+        
+            // Query builder with filtering
+            $query = DB::connection('wax')->table('mst_party_master')
+                ->select(
+                    'Id',
+                    DB::raw("CASE 
+                                WHEN Party_Type = 1 THEN 'Debtor' 
+                                WHEN Party_Type = 2 THEN 'Creditor' 
+                             END AS Party_Tp"),
+                    'Party_Type', 'Party_Name', 'Party_Add', 'Party_Mob', 
+                    'Party_Mail', 'Party_Gst', 'Ledger_Id', 'Open_Bal'
+                );
+        
+            // Apply search filter if provided
+            if (!empty($searchTerm)) {
+                $query->where('Party_Name', 'LIKE', "%$searchTerm%");
+            }
+        
+            // Apply pagination
+            $sql = $query->paginate($perPage, ['*'], 'page', $page);
+        
+            if ($sql->isEmpty()) {
                 return response()->json([
                     'message' => 'No Data Found',
                     'details' => null,
                 ], 202);
             }
-
+        
             return response()->json([
                 'message' => 'Data Found',
                 'details' => $sql,
-            ],200);
-
+            ], 200);
+        
         } catch (Exception $ex) {
             $response = response()->json([
                 'message' => 'Error Found',
                 'details' => $ex->getMessage(),
-            ],400);
-
+            ], 400);
+        
             throw new HttpResponseException($response);
-        } 
+        }
     }
 
     public function update_party(Request $request){
@@ -1936,38 +2125,62 @@ class ProcessMaster extends Controller
         }
     }
 
-    public function get_design_list(Int $org_id){
+    public function get_design_list(Request $request){
         try {
-            $sql = DB::select("Select UDF_GET_ORG_SCHEMA(?) as db;",[$org_id]);
-            if(!$sql){
-              throw new Exception;
+            $sql = DB::select("Select UDF_GET_ORG_SCHEMA(?) as db;", [$request->org_id]);
+            if (!$sql) {
+                throw new Exception("Organization schema not found.");
             }
+        
             $org_schema = $sql[0]->db;
-            $db = Config::get('database.connections.mysql');
+            $db = config('database.connections.mysql');
             $db['database'] = $org_schema;
             config()->set('database.connections.wax', $db);
-
-            $sql = DB::connection('wax')->select("Select m.Id,m.Design_Name,m.Design_No,m.WT,m.Wt_Rate,m.Polish,d.Item_Id,d.Qnty,d.Making_Rate,m.Image,i.Item_Name,i.Item_Sh_Name From mst_design_master m Join mst_design_details d On d.Design_Id=m.Id Join mst_item_master i On i.Id=d.Item_Id;");
-
-            if (empty($sql)) {
-                // Custom validation for no data found
+        
+            // Get pagination and filter parameters
+            $perPage = $request->per_page ?? 10; // Default: 10 per page
+            $page = $request->page ?? 1;
+            $searchTerm = $request->keyword ?? null; // Filter value for Design_Name or Design_No
+        
+            // Query builder with filtering
+            $query = DB::connection('wax')->table('mst_design_master as m')
+                ->join('mst_design_details as d', 'd.Design_Id', '=', 'm.Id')
+                ->join('mst_item_master as i', 'i.Id', '=', 'd.Item_Id')
+                ->select(
+                    'm.Id', 'm.Design_Name', 'm.Design_No', 'm.WT', 'm.Wt_Rate', 
+                    'm.Polish', 'd.Item_Id', 'd.Qnty', 'd.Making_Rate', 
+                    'm.Image', 'i.Item_Name', 'i.Item_Sh_Name'
+                );
+        
+            // Apply search filter if provided
+            if (!empty($searchTerm)) {
+                $query->where(function ($q) use ($searchTerm) {
+                    $q->where('m.Design_Name', 'LIKE', "%$searchTerm%")
+                      ->orWhere('m.Design_No', 'LIKE', "%$searchTerm%");
+                });
+            }
+        
+            // Apply pagination
+            $sql = $query->paginate($perPage, ['*'], 'page', $page);
+        
+            if ($sql->isEmpty()) {
                 return response()->json([
                     'message' => 'No Data Found',
                     'details' => null,
                 ], 202);
             }
-
+        
+            // Formatting the response to group child rows
             $menu_set = [];
-            
-            foreach ($sql as $row) {
+            foreach ($sql->items() as $row) {
                 if (!isset($menu_set[$row->Id])) {
                     $menu_set[$row->Id] = [
-                        'Id' =>$row->Id,
+                        'Id' => $row->Id,
                         'Design_Name' => $row->Design_Name,
                         'Design_No' => $row->Design_No,
                         'WT' => $row->WT,
                         'Wt_Rate' => $row->Wt_Rate,
-                        'image' => $this->getUrl($org_id,$row->Image),
+                        'image' => $this->getUrl($request->org_id, $row->Image),
                         'File_Name' => $row->Image,
                         'Polish' => $row->Polish,
                         "childrow" => []
@@ -1983,27 +2196,34 @@ class ProcessMaster extends Controller
                     ];
                 }
             }
-    
+        
+            // Convert associative array to indexed array for JSON response
             $menu_set = array_values($menu_set);
-
+        
             return response()->json([
                 'message' => 'Data Found',
-                'details' => $menu_set,
-            ],200);
-
+                'details' => [
+                    'current_page' => $sql->currentPage(),
+                    'per_page' => $sql->perPage(),
+                    'total' => $sql->total(),
+                    'last_page' => $sql->lastPage(),
+                    'data' => $menu_set,
+                ],
+            ], 200);
+        
         } catch (Exception $ex) {
             $response = response()->json([
                 'message' => 'Error Found',
                 'details' => $ex->getMessage(),
-            ],400);
-
+            ], 400);
+        
             throw new HttpResponseException($response);
-        } 
+        }
     }
 
-    public function get_cat_item_list(Int $org_id,Int $cat_id){
+    public function get_cat_item_list(Request $request){
         try {
-            $sql = DB::select("Select UDF_GET_ORG_SCHEMA(?) as db;",[$org_id]);
+            $sql = DB::select("Select UDF_GET_ORG_SCHEMA(?) as db;",[$request->org_id]);
             if(!$sql){
               throw new Exception;
             }
@@ -2012,7 +2232,7 @@ class ProcessMaster extends Controller
             $db['database'] = $org_schema;
             config()->set('database.connections.wax', $db);
 
-            $sql = DB::connection('wax')->select("Select Id,Item_Name From mst_item_master Where Cat_Id=?;",[$cat_id]);
+            $sql = DB::connection('wax')->select("Select Id,Item_Name From mst_item_master Where Cat_Id=?;",[$request->cat_id]);
 
             if (empty($sql)) {
                 // Custom validation for no data found
