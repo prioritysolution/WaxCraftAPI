@@ -348,4 +348,207 @@ class ProcessUserLogin extends Controller
           throw new HttpResponseException($response);
         }
     }
+
+    public function get_user_list(Request $request){
+        try {
+            
+            $sql = DB::select("Select m.Id,m.Org_Id,m.Role_Id,m.User_Name,m.User_Mail,m.User_Mob,r.Role_Name From mst_org_user m Join mst_org_user_role r On r.Id=m.Role_Id Where m.Is_Active=1 And m.Org_Id=?;",[$request->org_id]);
+
+            if (empty($sql)) {
+                // Custom validation for no data found
+                return response()->json([
+                    'message' => 'No Data Found',
+                    'details' => null,
+                ], 202);
+            }
+
+            return response()->json([
+                'message' => 'Data Found',
+                'details' => $sql
+            ]);
+
+        } catch (Exception $ex) {
+            $response = response()->json([
+                'message' => 'Error Found',
+                'details' => $ex->getMessage(),
+            ],400);
+
+            throw new HttpResponseException($response);
+        }
+    }
+
+    public function update_org_user(Request $request){
+        $validator = Validator::make($request->all(),[
+            'user_id' => 'required',
+            'user_name' =>'required',
+            'user_mail' => 'required',
+            'user_mob' => 'required',
+            'user_role' => 'required',
+        ]);
+
+        if($validator->passes()){
+            try {
+
+                DB::beginTransaction();
+
+                $sql = DB::statement("Call USP_ADD_ORG_USER(?,?,?,?,?,?,?,?,?,@error,@messg);",[$request->user_id,$request->org_id,$request->user_name,$request->user_mail,$request->user_mob,Hash::make($request->user_pass),$request->user_role,1,2]);
+
+                if(!$sql){
+                    throw new Exception;
+                }
+
+                $result = DB::select("Select @error As Error_No,@messg As Message");
+                $error_No = $result[0]->Error_No;
+                $message = $result[0]->Message;
+
+                if($error_No<0){
+                    DB::rollBack();
+                    return response()->json([
+                        'message' => $message,
+                        'details' => null,
+                    ],400);
+                }
+                else{
+                    DB::commit();
+                    return response()->json([
+                        'message' => 'User Successfully Added !!',
+                        'details' => null,
+                    ],200);
+                }
+
+            } catch (Exception $ex) {
+                DB::rollBack(); 
+                $response = response()->json([
+                    'message' => $ex->getMessage(),
+                    'details' => null,
+                ],400);
+    
+                throw new HttpResponseException($response);
+            }
+        }
+        else{
+            $errors = $validator->errors();
+
+            $response = response()->json([
+              'message' => $errors->messages(),
+              'details' => null,
+          ],400);
+      
+          throw new HttpResponseException($response);
+        }
+    }
+
+    public function get_role_menue(Request $request){
+        try {
+            
+            $sql = DB::select("Select m.Id As Sub_Module_Id,m.Sub_Module_Name,mn.Id As Menue_Id,mn.Menue_Name,mn.Sub_Module_Id From mst_org_sub_module m Left Join mst_org_module_menue mn on mn.Sub_Module_Id=m.Id Where m.Module_Id In (Select Module_Id From map_org_module Where Org_Id=? And Is_Active=1) And m.Id Not In (1,10) Order By m.SL,mn.SL;",[$request->org_id]);
+
+            if (empty($sql)) {
+                // Custom validation for no data found
+                return response()->json([
+                    'message' => 'No Data Found',
+                    'details' => null,
+                ], 202);
+            }
+            $menue_set = [];
+            foreach ($sql as $menue) {
+                if(!isset($menu_set[$menue->Sub_Module_Id])){
+                    $menu_set[$menue->Sub_Module_Id]=[
+                        "Module_Id" => $menue->Sub_Module_Id,
+                        "Module_Name" => $menue->Sub_Module_Name,
+                        "ChildRow" => [],
+                    ];
+                }
+                if($menue->Menue_Id){
+                    if(!isset($menu_set[$menue->Sub_Module_Id]["ChildRow"][$menue->Menue_Id])){
+                        $menu_set[$menue->Sub_Module_Id]["ChildRow"][]=[
+                            "Menue_Id" => $menue->Menue_Id,
+                            "menue_Name" => $menue->Menue_Name
+                        ];
+                    }
+                }
+                
+            }
+            $menu_set = array_values($menu_set);
+            return response()->json([
+                'message' => 'Data Found',
+                'details' => $menu_set
+            ]);
+
+        } catch (Exception $ex) {
+            $response = response()->json([
+                'message' => 'Error Found',
+                'details' => $ex->getMessage(),
+            ],400);
+
+            throw new HttpResponseException($response);
+        }
+    }
+
+    public function map_user_role(Request $request){
+        $validator = Validator::make($request->all(),[
+           'user_id' => 'required',
+           'Module_Array' => 'required'
+        ]);
+        if($validator->passes()){
+            try {
+
+                DB::beginTransaction();
+
+                $module_details = $this->convertToObject($request->Module_Array);
+                $drop_table = DB::statement("Drop Temporary Table If Exists tempmodule;");
+                $create_tabl = DB::statement("Create Temporary Table tempmodule
+                                            (
+                                                Module_Id		Int,
+                                                Menue_Id		Int
+                                            );");
+                foreach ($module_details as $module_data) {
+                   DB::statement("Insert Into tempmodule (Module_Id,Menue_Id) Values (?,?);",[$module_data->module_id,$module_data->menue_id]);
+                }
+
+                $sql = DB::statement("Call USP_MAP_USER_ROLE(?,@error,@message);",[$request->user_id]);
+
+                if(!$sql){
+                    throw new Exception;
+                }
+                $result = DB::select("Select @error As Error_No,@message As Message;");
+                $error_No = $result[0]->Error_No;
+                $message = $result[0]->Message;
+    
+                if($error_No<0){
+                    DB::rollBack();
+                    return response()->json([
+                        'message' => $message,
+                        'details' => null,
+                    ],202);
+                }
+                else{
+                    DB::commit();
+                    return response()->json([
+                        'message' => 'User Module Successfully Mapped !!',
+                        'details' => null,
+                    ],200);
+                }
+
+            } catch (Exception $ex) {
+                DB::rollBack(); 
+                $response = response()->json([
+                    'message' => $ex->getMessage(),
+                    'details' => null,
+                ],400);
+    
+                throw new HttpResponseException($response);
+            }
+        }
+        else{
+            $errors = $validator->errors();
+
+            $response = response()->json([
+              'message' => $errors->messages(),
+              'details' => null,
+          ],202);
+      
+          throw new HttpResponseException($response);
+        }
+    }
 }

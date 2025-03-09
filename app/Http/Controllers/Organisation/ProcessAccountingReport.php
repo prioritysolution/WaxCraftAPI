@@ -146,40 +146,56 @@ class ProcessAccountingReport extends Controller
         }
     }
 
-    public function process_ledger(Int $org_id){
+    public function process_ledger(Request $request){
         try {
-            $sql = DB::select("Select UDF_GET_ORG_SCHEMA(?) as db;",[$org_id]);
-            if(!$sql){
-              throw new Exception;
+            $sql = DB::select("Select UDF_GET_ORG_SCHEMA(?) as db;", [$request->org_id]);
+            if (!$sql || empty($sql[0]->db)) {
+                throw new Exception("Organization schema not found");
             }
+        
             $org_schema = $sql[0]->db;
             $db = Config::get('database.connections.mysql');
             $db['database'] = $org_schema;
             config()->set('database.connections.wax', $db);
-
-            $sql = DB::connection('wax')->select("Select Id,Ledger_Name From mst_org_acct_ledger Where Id<>3;");
-
-            if (empty($sql)) {
-                // Custom validation for no data found
+        
+            // Start query
+            $query = DB::connection('wax')->table('mst_org_acct_ledger')
+                ->select('Id', 'Ledger_Name')
+                ->where('Id', '<>', 3);
+        
+            // Apply keyword filter if provided
+            if (!empty($request->keyword)) {
+                $query->where('Ledger_Name', 'like', '%' . $request->keyword . '%');
+            }
+        
+            // Paginate results (10 per page)
+            $ledgers = $query->paginate(10);
+        
+            if ($ledgers->isEmpty()) {
                 return response()->json([
                     'message' => 'No Data Found',
                     'details' => null,
                 ], 202);
             }
-
+        
             return response()->json([
                 'message' => 'Data Found',
-                'details' => $sql,
-            ],200);
-
+                'details' => $ledgers->items(),
+                'pagination' => [
+                    'total' => $ledgers->total(),
+                    'per_page' => $ledgers->perPage(),
+                    'current_page' => $ledgers->currentPage(),
+                    'last_page' => $ledgers->lastPage(),
+                ]
+            ], 200);
+        
         } catch (Exception $ex) {
-            $response = response()->json([
+            return response()->json([
                 'message' => 'Error Found',
                 'details' => $ex->getMessage(),
-            ],400);
-
-            throw new HttpResponseException($response);
+            ], 400);
         }
+        
     }
 
     public function process_acct_ledger(Request $request){
@@ -230,6 +246,78 @@ class ProcessAccountingReport extends Controller
             config()->set('database.connections.wax', $db);
 
             $sql = DB::connection('wax')->select("Call USP_RPT_CASH_BOOK(?);",[$request->date]);
+
+            if (empty($sql)) {
+                // Custom validation for no data found
+                return response()->json([
+                    'message' => 'No Data Found',
+                    'details' => null,
+                ], 202);
+            }
+            $cashbook_data = [];
+           
+            foreach ($sql as $cashbook) {
+                if($cashbook->Opening_Balance){
+                    $cashbook_data['Opening_Balance']=[
+                        'Opening_Cash' => $cashbook->Opening_Balance,
+                        'Receipt_Data' => [],
+                        'Payment_Data'=>[],
+                        'Closing_Cash'=>'',
+                    ];
+                }
+
+                if($cashbook->Rec_Vouch_No){
+                    $cashbook_data['Opening_Balance']['Receipt_Data'][]=[
+                        'Vouch_No' => $cashbook->Rec_Vouch_No,
+                        'Manual_Voucher' =>$cashbook->Rec_Vouch_No,
+                        'Ledger_Name' => $cashbook->Ledger_Name,
+                        'Particular' => $cashbook->Rec_Particular,
+                        'Amount' => $cashbook->Rec_Amount,
+                    ];
+                }
+
+                if($cashbook->Pay_Particular){
+                    $cashbook_data['Opening_Balance']['Payment_Data'][]=[
+                        'Vouch_No' => $cashbook->Rec_Vouch_No,
+                        'Manual_Voucher' =>$cashbook->Rec_Vouch_No,
+                        'Ledger_Name' => $cashbook->Ledger_Name,
+                        'Particular' => $cashbook->Pay_Particular,
+                        'Amount' => $cashbook->Pay_Amount,
+                    ];
+                }
+
+                 if($cashbook->Closing_Balance){
+                    $cashbook_data['Opening_Balance']['Closing_Cash']=$cashbook->Closing_Balance;
+                }
+            }
+            $cashbook_data = array_values($cashbook_data);
+            return response()->json([
+                'message' => 'Data Found',
+                'details' => $cashbook_data,
+            ],200);
+
+        } catch (Exception $ex) {
+            $response = response()->json([
+                'message' => 'Error Found',
+                'details' => $ex->getMessage(),
+            ],400);
+
+            throw new HttpResponseException($response);
+        }
+    }
+
+    public function process_tlrbook(Request $request){
+        try {
+            $sql = DB::select("Select UDF_GET_ORG_SCHEMA(?) as db;",[$request->org_id]);
+            if(!$sql){
+              throw new Exception;
+            }
+            $org_schema = $sql[0]->db;
+            $db = Config::get('database.connections.mysql');
+            $db['database'] = $org_schema;
+            config()->set('database.connections.wax', $db);
+
+            $sql = DB::connection('wax')->select("Call USP_RPT_TLR_CASH_BOOK(?,?);",[$request->user_id,$request->date]);
 
             if (empty($sql)) {
                 // Custom validation for no data found

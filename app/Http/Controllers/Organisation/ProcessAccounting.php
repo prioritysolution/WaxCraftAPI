@@ -15,45 +15,66 @@ use \stdClass;
 
 class ProcessAccounting extends Controller
 {
-    public function get_ledger_list(Int $org_id){
+    public function get_ledger_list(Request $request){
         try {
-            $sql = DB::select("Select UDF_GET_ORG_SCHEMA(?) as db;",[$org_id]);
-            if(!$sql){
-              throw new Exception;
+            $sql = DB::select("Select UDF_GET_ORG_SCHEMA(?) as db;", [$request->org_id]);
+            if (!$sql || empty($sql[0]->db)) {
+                throw new Exception("Organization schema not found");
             }
+        
             $org_schema = $sql[0]->db;
             $db = Config::get('database.connections.mysql');
             $db['database'] = $org_schema;
             config()->set('database.connections.wax', $db);
-
-            $sql = DB::connection('wax')->select("Select Id,Ledger_Name From mst_org_acct_ledger Where Sub_Head Not In (1,2,3,9) Or Sub_Head Is Null And Id<>3;");
-
-            if (empty($sql)) {
-                // Custom validation for no data found
+        
+            // Start query
+            $query = DB::connection('wax')->table('mst_org_acct_ledger')
+                ->select('Id', 'Ledger_Name')
+                ->where(function ($q) {
+                    $q->whereNotIn('Sub_Head', [1, 2, 3, 9])
+                      ->orWhereNull('Sub_Head');
+                })
+                ->where('Id', '<>', 3);
+        
+            // Check if keyword exists and apply filter
+            if ($request->has('keyword') && !empty($request->keyword)) {
+                $keyword = trim($request->keyword);
+                $query->where('Ledger_Name', 'LIKE', "%{$keyword}%");
+            }
+        
+            // Paginate results (10 per page)
+            $ledgers = $query->paginate(10);
+        
+            if ($ledgers->isEmpty()) {
                 return response()->json([
                     'message' => 'No Data Found',
                     'details' => null,
                 ], 202);
             }
-
+        
             return response()->json([
                 'message' => 'Data Found',
-                'details' => $sql,
-            ],200);
-
+                'details' => $ledgers->items(),
+                'pagination' => [
+                    'total' => $ledgers->total(),
+                    'per_page' => $ledgers->perPage(),
+                    'current_page' => $ledgers->currentPage(),
+                    'last_page' => $ledgers->lastPage(),
+                ]
+            ], 200);
+        
         } catch (Exception $ex) {
-            $response = response()->json([
+            return response()->json([
                 'message' => 'Error Found',
                 'details' => $ex->getMessage(),
-            ],400);
-
-            throw new HttpResponseException($response);
-        } 
+            ], 400);
+        }        
+        
     }
 
-    public function get_ledger_party(Int $org_id,Int $ledger_id){
+    public function get_ledger_party(Request $request){
         try {
-            $sql = DB::select("Select UDF_GET_ORG_SCHEMA(?) as db;",[$org_id]);
+            $sql = DB::select("Select UDF_GET_ORG_SCHEMA(?) as db;",[$request->org_id]);
             if(!$sql){
               throw new Exception;
             }
@@ -62,7 +83,7 @@ class ProcessAccounting extends Controller
             $db['database'] = $org_schema;
             config()->set('database.connections.wax', $db);
 
-            $sql = DB::connection('wax')->select("Select Id,Party_Name From mst_party_master Where Ledger_Id=?;",[$ledger_id]);
+            $sql = DB::connection('wax')->select("Select Id,Party_Name From mst_party_master Where Ledger_Id=?;",[$request->ledger_id]);
 
             if (empty($sql)) {
                 // Custom validation for no data found
@@ -154,40 +175,53 @@ class ProcessAccounting extends Controller
     }
     }
 
-    public function get_recpt_list(Int $org_id){
+    public function get_recpt_list(Request $request){
         try {
-            $sql = DB::select("Select UDF_GET_ORG_SCHEMA(?) as db;",[$org_id]);
-            if(!$sql){
-              throw new Exception;
+            $sql = DB::select("Select UDF_GET_ORG_SCHEMA(?) as db;", [$request->org_id]);
+            if (!$sql || empty($sql[0]->db)) {
+                throw new Exception("Organization schema not found");
             }
+        
             $org_schema = $sql[0]->db;
             $db = Config::get('database.connections.mysql');
             $db['database'] = $org_schema;
             config()->set('database.connections.wax', $db);
-
-            $sql = DB::connection('wax')->select("Select m.Id,m.Trans_Date,m.Vouch_No,m.Ref_Vouch_No,m.Particular,d.Amount From trn_voucher_master m Join trn_voucher_details d On d.Trans_Id=m.Id And d.Trns_Type='D' Where m.Trans_Source In('AR','JR');");
-
-            if (empty($sql)) {
-                // Custom validation for no data found
+        
+            // Fetch records with pagination (10 per page)
+            $vouchers = DB::connection('wax')->table('trn_voucher_master as m')
+                ->join('trn_voucher_details as d', function ($join) {
+                    $join->on('d.Trans_Id', '=', 'm.Id')
+                        ->where('d.Trns_Type', '=', 'D');
+                })
+                ->select('m.Id', 'm.Trans_Date', 'm.Vouch_No', 'm.Ref_Vouch_No', 'm.Particular', 'd.Amount')
+                ->whereIn('m.Trans_Source', ['AR', 'JR'])
+                ->paginate(10); // Paginate with 10 records per page
+        
+            if ($vouchers->isEmpty()) {
                 return response()->json([
                     'message' => 'No Data Found',
                     'details' => null,
                 ], 202);
             }
-
+        
             return response()->json([
                 'message' => 'Data Found',
-                'details' => $sql,
-            ],200);
-
+                'details' => $vouchers->items(),
+                'pagination' => [
+                    'total' => $vouchers->total(),
+                    'per_page' => $vouchers->perPage(),
+                    'current_page' => $vouchers->currentPage(),
+                    'last_page' => $vouchers->lastPage(),
+                ]
+            ], 200);
+        
         } catch (Exception $ex) {
-            $response = response()->json([
+            return response()->json([
                 'message' => 'Error Found',
                 'details' => $ex->getMessage(),
-            ],400);
-
-            throw new HttpResponseException($response);
+            ], 400);
         }
+        
     }
 
     public function cancel_recpt_voucher(Request $request){
@@ -320,40 +354,53 @@ class ProcessAccounting extends Controller
     }
     }
 
-    public function get_payment_list(Int $org_id){
+    public function get_payment_list(Request $request){
         try {
-            $sql = DB::select("Select UDF_GET_ORG_SCHEMA(?) as db;",[$org_id]);
-            if(!$sql){
-              throw new Exception;
+            $sql = DB::select("Select UDF_GET_ORG_SCHEMA(?) as db;", [$request->org_id]);
+            if (!$sql || empty($sql[0]->db)) {
+                throw new Exception("Organization schema not found");
             }
+        
             $org_schema = $sql[0]->db;
             $db = Config::get('database.connections.mysql');
             $db['database'] = $org_schema;
             config()->set('database.connections.wax', $db);
-
-            $sql = DB::connection('wax')->select("Select m.Id,m.Trans_Date,m.Vouch_No,m.Ref_Vouch_No,m.Particular,d.Amount From trn_voucher_master m Join trn_voucher_details d On d.Trans_Id=m.Id And d.Trns_Type='C' Where m.Trans_Source In('AP','JP');");
-
-            if (empty($sql)) {
-                // Custom validation for no data found
+        
+            // Fetch paginated records (10 per page)
+            $vouchers = DB::connection('wax')->table('trn_voucher_master as m')
+                ->join('trn_voucher_details as d', function ($join) {
+                    $join->on('d.Trans_Id', '=', 'm.Id')
+                        ->where('d.Trns_Type', '=', 'C');
+                })
+                ->select('m.Id', 'm.Trans_Date', 'm.Vouch_No', 'm.Ref_Vouch_No', 'm.Particular', 'd.Amount')
+                ->whereIn('m.Trans_Source', ['AP', 'JP'])
+                ->paginate(10); // 10 records per page
+        
+            if ($vouchers->isEmpty()) {
                 return response()->json([
                     'message' => 'No Data Found',
                     'details' => null,
                 ], 202);
             }
-
+        
             return response()->json([
                 'message' => 'Data Found',
-                'details' => $sql,
-            ],200);
-
+                'details' => $vouchers->items(),
+                'pagination' => [
+                    'total' => $vouchers->total(),
+                    'per_page' => $vouchers->perPage(),
+                    'current_page' => $vouchers->currentPage(),
+                    'last_page' => $vouchers->lastPage(),
+                ]
+            ], 200);
+        
         } catch (Exception $ex) {
-            $response = response()->json([
+            return response()->json([
                 'message' => 'Error Found',
                 'details' => $ex->getMessage(),
-            ],400);
-
-            throw new HttpResponseException($response);
+            ], 400);
         }
+        
     }
 
     public function cancel_payment_voucher(Request $request){
@@ -522,40 +569,53 @@ class ProcessAccounting extends Controller
     }
     }
 
-    public function get_bank_dep_list(Int $org_id){
+    public function get_bank_dep_list(Request $request){
         try {
-            $sql = DB::select("Select UDF_GET_ORG_SCHEMA(?) as db;",[$org_id]);
-            if(!$sql){
-              throw new Exception;
+            $sql = DB::select("Select UDF_GET_ORG_SCHEMA(?) as db;", [$request->org_id]);
+            if (!$sql || empty($sql[0]->db)) {
+                throw new Exception("Organization schema not found");
             }
+        
             $org_schema = $sql[0]->db;
             $db = Config::get('database.connections.mysql');
             $db['database'] = $org_schema;
             config()->set('database.connections.wax', $db);
-
-            $sql = DB::connection('wax')->select("Select m.Id,m.Trans_Date,m.Vouch_No,m.Ref_Vouch_No,m.Particular,d.Amount From trn_voucher_master m Join trn_voucher_details d On d.Trans_Id=m.Id And d.Trns_Type='D' Where m.Trans_Source ='BP';");
-
-            if (empty($sql)) {
-                // Custom validation for no data found
+        
+            // Fetch paginated records (10 per page)
+            $vouchers = DB::connection('wax')->table('trn_voucher_master as m')
+                ->join('trn_voucher_details as d', function ($join) {
+                    $join->on('d.Trans_Id', '=', 'm.Id')
+                        ->where('d.Trns_Type', '=', 'D');
+                })
+                ->select('m.Id', 'm.Trans_Date', 'm.Vouch_No', 'm.Ref_Vouch_No', 'm.Particular', 'd.Amount')
+                ->where('m.Trans_Source', 'BP')
+                ->paginate(10); // 10 records per page
+        
+            if ($vouchers->isEmpty()) {
                 return response()->json([
                     'message' => 'No Data Found',
                     'details' => null,
                 ], 202);
             }
-
+        
             return response()->json([
                 'message' => 'Data Found',
-                'details' => $sql,
-            ],200);
-
+                'details' => $vouchers->items(),
+                'pagination' => [
+                    'total' => $vouchers->total(),
+                    'per_page' => $vouchers->perPage(),
+                    'current_page' => $vouchers->currentPage(),
+                    'last_page' => $vouchers->lastPage(),
+                ]
+            ], 200);
+        
         } catch (Exception $ex) {
-            $response = response()->json([
+            return response()->json([
                 'message' => 'Error Found',
                 'details' => $ex->getMessage(),
-            ],400);
-
-            throw new HttpResponseException($response);
+            ], 400);
         }
+        
     }
 
     public function cancel_bank_deposit(Request $request){
@@ -688,40 +748,53 @@ class ProcessAccounting extends Controller
     }
     }
 
-    public function get_bank_with_list(Int $org_id){
+    public function get_bank_with_list(Request $request){
         try {
-            $sql = DB::select("Select UDF_GET_ORG_SCHEMA(?) as db;",[$org_id]);
-            if(!$sql){
-              throw new Exception;
+            $sql = DB::select("Select UDF_GET_ORG_SCHEMA(?) as db;", [$request->org_id]);
+            if (!$sql || empty($sql[0]->db)) {
+                throw new Exception("Organization schema not found");
             }
+        
             $org_schema = $sql[0]->db;
             $db = Config::get('database.connections.mysql');
             $db['database'] = $org_schema;
             config()->set('database.connections.wax', $db);
-
-            $sql = DB::connection('wax')->select("Select m.Id,m.Trans_Date,m.Vouch_No,m.Ref_Vouch_No,m.Particular,d.Amount From trn_voucher_master m Join trn_voucher_details d On d.Trans_Id=m.Id And d.Trns_Type='C' Where m.Trans_Source ='BR';");
-
-            if (empty($sql)) {
-                // Custom validation for no data found
+        
+            // Fetch paginated records (10 per page)
+            $vouchers = DB::connection('wax')->table('trn_voucher_master as m')
+                ->join('trn_voucher_details as d', function ($join) {
+                    $join->on('d.Trans_Id', '=', 'm.Id')
+                        ->where('d.Trns_Type', '=', 'C');
+                })
+                ->select('m.Id', 'm.Trans_Date', 'm.Vouch_No', 'm.Ref_Vouch_No', 'm.Particular', 'd.Amount')
+                ->where('m.Trans_Source', 'BR')
+                ->paginate(10); // Fetch 10 records per page
+        
+            if ($vouchers->isEmpty()) {
                 return response()->json([
                     'message' => 'No Data Found',
                     'details' => null,
                 ], 202);
             }
-
+        
             return response()->json([
                 'message' => 'Data Found',
-                'details' => $sql,
-            ],200);
-
+                'details' => $vouchers->items(),
+                'pagination' => [
+                    'total' => $vouchers->total(),
+                    'per_page' => $vouchers->perPage(),
+                    'current_page' => $vouchers->currentPage(),
+                    'last_page' => $vouchers->lastPage(),
+                ]
+            ], 200);
+        
         } catch (Exception $ex) {
-            $response = response()->json([
+            return response()->json([
                 'message' => 'Error Found',
                 'details' => $ex->getMessage(),
-            ],400);
-
-            throw new HttpResponseException($response);
+            ], 400);
         }
+        
     }
 
     public function cancel_bank_withdrwan(Request $request){
@@ -855,40 +928,53 @@ class ProcessAccounting extends Controller
     }
     }
 
-    public function list_bank_transfer(Int $org_id){
+    public function list_bank_transfer(Request $request){
         try {
-            $sql = DB::select("Select UDF_GET_ORG_SCHEMA(?) as db;",[$org_id]);
-            if(!$sql){
-              throw new Exception;
+            $sql = DB::select("Select UDF_GET_ORG_SCHEMA(?) as db;", [$request->org_id]);
+            if (!$sql || empty($sql[0]->db)) {
+                throw new Exception("Organization schema not found");
             }
+        
             $org_schema = $sql[0]->db;
             $db = Config::get('database.connections.mysql');
             $db['database'] = $org_schema;
             config()->set('database.connections.wax', $db);
-
-            $sql = DB::connection('wax')->select("Select m.Id,m.Trans_Date,m.Vouch_No,m.Ref_Vouch_No,m.Particular,d.Amount From trn_voucher_master m Join trn_voucher_details d On d.Trans_Id=m.Id And d.Trns_Type='D' Where m.Trans_Source ='BJ';");
-
-            if (empty($sql)) {
-                // Custom validation for no data found
+        
+            // Fetch paginated records (10 per page)
+            $vouchers = DB::connection('wax')->table('trn_voucher_master as m')
+                ->join('trn_voucher_details as d', function ($join) {
+                    $join->on('d.Trans_Id', '=', 'm.Id')
+                        ->where('d.Trns_Type', '=', 'D');
+                })
+                ->select('m.Id', 'm.Trans_Date', 'm.Vouch_No', 'm.Ref_Vouch_No', 'm.Particular', 'd.Amount')
+                ->where('m.Trans_Source', 'BJ')
+                ->paginate(10); // Fetch 10 records per page
+        
+            if ($vouchers->isEmpty()) {
                 return response()->json([
                     'message' => 'No Data Found',
                     'details' => null,
                 ], 202);
             }
-
+        
             return response()->json([
                 'message' => 'Data Found',
-                'details' => $sql,
-            ],200);
-
+                'details' => $vouchers->items(),
+                'pagination' => [
+                    'total' => $vouchers->total(),
+                    'per_page' => $vouchers->perPage(),
+                    'current_page' => $vouchers->currentPage(),
+                    'last_page' => $vouchers->lastPage(),
+                ]
+            ], 200);
+        
         } catch (Exception $ex) {
-            $response = response()->json([
+            return response()->json([
                 'message' => 'Error Found',
                 'details' => $ex->getMessage(),
-            ],400);
-
-            throw new HttpResponseException($response);
+            ], 400);
         }
+        
     }
 
     public function cancel_bank_transfer(Request $request){
@@ -931,6 +1017,124 @@ class ProcessAccounting extends Controller
                     'details' => null,
                 ],200);
             }
+            
+        } catch (Exception $ex) {
+            DB::connection('wax')->rollBack();
+            $response = response()->json([
+                'message' => $ex->getMessage(),
+                'details' => null,
+            ],400);
+
+            throw new HttpResponseException($response);
+        }
+    }
+    else{
+        $errors = $validator->errors();
+
+            $response = response()->json([
+                'message' => $errors->messages(),
+                'details' => null,
+            ],202);
+        
+            throw new HttpResponseException($response);
+    }
+    }
+
+    public function get_trailor_list(Request $request){
+        try {
+            
+            $sql = DB::select("Select Id,User_Name From mst_org_user Where Org_Id=? And Role_Id<>1 And Is_Active=1;",[$request->org_id]);
+
+            if (empty($sql)) {
+                // Custom validation for no data found
+                return response()->json([
+                    'message' => 'No Data Found',
+                    'details' => null,
+                ], 202);
+            }
+
+            return response()->json([
+                'message' => 'Data Found',
+                'details' => $sql
+            ]);
+
+        } catch (Exception $ex) {
+            $response = response()->json([
+                'message' => 'Error Found',
+                'details' => $ex->getMessage(),
+            ],400);
+
+            throw new HttpResponseException($response);
+        }
+    }
+
+    public function get_trailor_balance(Request $request){
+        try {
+            $sql = DB::select("Select UDF_GET_ORG_SCHEMA(?) as db;",[$request->org_id]);
+            if(!$sql){
+              throw new Exception;
+            }
+            $org_schema = $sql[0]->db;
+            $db = Config::get('database.connections.mysql');
+            $db['database'] = $org_schema;
+            config()->set('database.connections.wax', $db);
+
+            $sql = DB::connection('wax')->select("Select UDF_CAL_TLR_BALANCE(?,?) As Balance;",[$request->user_Id,$request->date]);
+
+            if (empty($sql)) {
+                // Custom validation for no data found
+                return response()->json([
+                    'message' => 'No Data Found',
+                    'details' => null,
+                ], 202);
+            }
+
+            return response()->json([
+                'message' => 'Data Found',
+                'details' => $sql,
+            ],200);
+
+        } catch (Exception $ex) {
+            $response = response()->json([
+                'message' => 'Error Found',
+                'details' => $ex->getMessage(),
+            ],400);
+
+            throw new HttpResponseException($response);
+        }
+    }
+
+    public function process_tlr_trans(Request $request){
+        $validator = Validator::make($request->all(),[
+            'org_id' => 'required',
+            'trans_date' => 'required',
+            'user_id' => 'required',
+            'trans_type' => 'required',
+            'amount' => 'required'
+        ]);
+        if($validator->passes()){
+        try {
+
+            $sql = DB::select("Select UDF_GET_ORG_SCHEMA(?) as db;",[$request->org_id]);
+            if(!$sql){
+              throw new Exception;
+            }
+            $org_schema = $sql[0]->db;
+            $db = Config::get('database.connections.mysql');
+            $db['database'] = $org_schema;
+            config()->set('database.connections.wax', $db);
+            DB::connection('wax')->beginTransaction();
+            $sql = DB::connection('wax')->statement("Call USP_POST_TLR_TRANS(?,?,?,?,?);",[$request->trans_date,$request->user_id,$request->trans_type,$request->amount,auth()->user()->Id]);
+
+            if(!$sql){
+                throw new Exception('Operation Error Found !!');
+            }
+           
+                DB::connection('wax')->commit();
+                return response()->json([
+                    'message' => 'Transaction Is Successfully Posted !!',
+                    'details' => null,
+                ],200);
             
         } catch (Exception $ex) {
             DB::connection('wax')->rollBack();

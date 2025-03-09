@@ -177,7 +177,7 @@ class ProcessInventoryReport extends Controller
             $db['database'] = $org_schema;
             config()->set('database.connections.wax', $db);
 
-            $sql = DB::connection('wax')->select("Call USP_RPT_PARTY_LEDGER(?,?,?);",[$request->form_date,$request->to_date,$request->party_id]);
+            $sql = DB::connection('wax')->select("Call USP_RPT_PARTY_LEDGER(?,?,?,?);",[$request->form_date,$request->to_date,$request->party_id,$request->type]);
 
             if (empty($sql)) {
                 // Custom validation for no data found

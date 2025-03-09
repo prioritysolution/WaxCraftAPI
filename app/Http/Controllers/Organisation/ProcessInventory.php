@@ -28,81 +28,115 @@ class ProcessInventory extends Controller
         return $object;
     }
 
-    public function get_debtor_list(Int $org_id){
+    public function get_debtor_list(Request $request){
         try {
-            $sql = DB::select("Select UDF_GET_ORG_SCHEMA(?) as db;",[$org_id]);
-            if(!$sql){
-              throw new Exception;
+            $sql = DB::select("Select UDF_GET_ORG_SCHEMA(?) as db;", [$request->org_id]);
+            if (!$sql) {
+                throw new Exception('Organization schema not found');
             }
+            
             $org_schema = $sql[0]->db;
             $db = Config::get('database.connections.mysql');
             $db['database'] = $org_schema;
             config()->set('database.connections.wax', $db);
+        
+            // Get filters and pagination parameters
+            $partyName = $request->input('keyword','');
+            $perPage = $request->input('per_page', 10); // Default 10 records per page
+            
+            // Build query with optional filter
+            $query = DB::connection('wax')->table('mst_party_master')
+                ->select('Id', 'Party_Name', 'Party_Add', 'Party_Mob', 'Party_Gst')
+                ->where('Party_Type', 1);
+            
+            if (!empty($partyName)) {
+                $query->where('Party_Name', 'LIKE', ["%$partyName%"]);
+            }
+            
+            if(!empty($request->party_id)){
+                $query->where('Id',$request->party_id);
+            }
 
-            $sql = DB::connection('wax')->select("Select Id,Party_Name,Party_Add,Party_Mob,Party_Gst From mst_party_master Where Party_Type=1;");
-
-            if (empty($sql)) {
-                // Custom validation for no data found
+            $parties = $query->paginate($perPage);
+            
+            if ($parties->isEmpty()) {
                 return response()->json([
                     'message' => 'No Data Found',
                     'details' => null,
                 ], 202);
             }
-
+            
             return response()->json([
                 'message' => 'Data Found',
-                'details' => $sql,
-            ],200);
-
+                'details' => $parties,
+            ], 200);
+            
         } catch (Exception $ex) {
             $response = response()->json([
                 'message' => 'Error Found',
                 'details' => $ex->getMessage(),
-            ],400);
-
-            throw new HttpResponseException($response);
-        } 
-    }
-
-    public function get_order_design(Int $org_id){
-        try {
-            $sql = DB::select("Select UDF_GET_ORG_SCHEMA(?) as db;",[$org_id]);
-            if(!$sql){
-              throw new Exception;
-            }
-            $org_schema = $sql[0]->db;
-            $db = Config::get('database.connections.mysql');
-            $db['database'] = $org_schema;
-            config()->set('database.connections.wax', $db);
-
-            $sql = DB::connection('wax')->select("Select Id,Concat(Design_Name,' - ',Design_No) As Design_Name From mst_design_master Where Is_Active=1;");
-
-            if (empty($sql)) {
-                // Custom validation for no data found
-                return response()->json([
-                    'message' => 'No Data Found',
-                    'details' => null,
-                ], 202);
-            }
-
-            return response()->json([
-                'message' => 'Data Found',
-                'details' => $sql,
-            ],200);
-
-        } catch (Exception $ex) {
-            $response = response()->json([
-                'message' => 'Error Found',
-                'details' => $ex->getMessage(),
-            ],400);
-
+            ], 400);
+        
             throw new HttpResponseException($response);
         }
     }
 
-    public function get_design_details(Int $org_id,Int $design_id){
+    public function get_order_design(Request $request){
         try {
-            $sql = DB::select("Select UDF_GET_ORG_SCHEMA(?) as db;",[$org_id]);
+            $sql = DB::select("Select UDF_GET_ORG_SCHEMA(?) as db;", [$request->org_id]);
+            if (!$sql) {
+                throw new Exception('Organization schema not found');
+            }
+            
+            $org_schema = $sql[0]->db;
+            $db = Config::get('database.connections.mysql');
+            $db['database'] = $org_schema;
+            config()->set('database.connections.wax', $db);
+        
+            // Get filters and pagination parameters
+            $search = $request->input('keyword','');
+            $perPage = $request->input('per_page', 10); // Default 10 records per page
+            
+            // Build query with optional filter
+            $query = DB::connection('wax')->table('mst_design_master')
+                ->select('Id', DB::raw("Concat(Design_Name,' - ',Design_No) As Design_Name"))
+                ->where('Is_Active', 1);
+            
+            if (!empty($search)) {
+                $query->where(function ($q) use ($search) {
+                    $q->where('Design_Name', 'LIKE', "%$search%")
+                      ->orWhere('Design_No', 'LIKE', "%$search%");
+                });
+            }
+            
+            $designs = $query->paginate($perPage);
+            
+            if ($designs->isEmpty()) {
+                return response()->json([
+                    'message' => 'No Data Found',
+                    'details' => null,
+                ], 202);
+            }
+            
+            return response()->json([
+                'message' => 'Data Found',
+                'details' => $designs,
+            ], 200);
+            
+        } catch (Exception $ex) {
+            $response = response()->json([
+                'message' => 'Error Found',
+                'details' => $ex->getMessage(),
+            ], 400);
+        
+            throw new HttpResponseException($response);
+        }
+        
+    }
+
+    public function get_design_details(Request $request){
+        try {
+            $sql = DB::select("Select UDF_GET_ORG_SCHEMA(?) as db;",[$request->org_id]);
             if(!$sql){
               throw new Exception;
             }
@@ -111,7 +145,7 @@ class ProcessInventory extends Controller
             $db['database'] = $org_schema;
             config()->set('database.connections.wax', $db);
 
-            $sql = DB::connection('wax')->select("Select m.Id,m.Design_Name,m.Design_No,m.WT,m.Wt_Rate,m.Polish,d.Item_Id,d.Qnty,i.Item_Name,i.Item_Sh_Name,UDF_GET_ITEM_RATE(d.Item_Id) As Item_Rate,d.Making_Rate,(UDF_GET_ITEM_RATE(d.Item_Id) * d.Qnty)+(d.Qnty*d.Making_Rate) As Item_Tot,m.Image,i.Purchase_Gl From mst_design_master m Join mst_design_details d On d.Design_Id=m.Id Join mst_item_master i On i.Id=d.Item_Id Where m.Id=?;",[$design_id]);
+            $sql = DB::connection('wax')->select("Select m.Id,m.Design_Name,m.Design_No,m.WT,m.Wt_Rate,m.Polish,d.Item_Id,d.Qnty,i.Item_Name,i.Item_Sh_Name,UDF_GET_ITEM_RATE(d.Item_Id) As Item_Rate,d.Making_Rate,(UDF_GET_ITEM_RATE(d.Item_Id) * d.Qnty)+(d.Qnty*d.Making_Rate) As Item_Tot,m.Image,i.Purchase_Gl From mst_design_master m Join mst_design_details d On d.Design_Id=m.Id Join mst_item_master i On i.Id=d.Item_Id Where m.Id=?;",[$request->design_id]);
 
             if (empty($sql)) {
                 // Custom validation for no data found
@@ -131,7 +165,7 @@ class ProcessInventory extends Controller
                         'WT' => $row->WT,
                         'Wt_Rate' => $row->Wt_Rate,
                         'Polish' => $row->Polish,
-                        'Image' =>$this->getUrl($org_id,$row->Image),
+                        'Image' =>$this->getUrl($request->org_id,$row->Image),
                         "childrow" => []
                     ];
                 }
@@ -205,7 +239,8 @@ class ProcessInventory extends Controller
                                                                     Item_Rate		Numeric(18,3),
                                                                     Making_Rate     Numeric(18,3),
                                                                     Item_Tot		Numeric(18,3),
-                                                                    Item_Grand_Tot  Numeric(18,3)
+                                                                    Item_Grand_Tot  Numeric(18,3),
+                                                                    Order_Id        Int
                                                                 );");
                 foreach ($order_details as $order_data) {
                    DB::connection('wax')->statement("Insert Into temporddetails (Design_Id,Qnty,Qnty_Rate,Wt_Rate,Tot_Wt,Polish_Rate,Tot_Polish,Item_Id,Item_Qnty,Item_Rate,Item_Tot,Wt,Item_Grand_Tot,Making_Rate,Item_Gl) Values (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?);",[$order_data->design_id,$order_data->qnty,$order_data->qnty_rate,$order_data->wt_rate,$order_data->tot_wt,$order_data->polish_rate,$order_data->tot_polish,$order_data->item_id,$order_data->item_qnty,$order_data->item_rate,$order_data->item_tot,$order_data->wt,$order_data->item_grand_tot,$order_data->making_rate,$order_data->Item_Gl]);
@@ -257,65 +292,77 @@ class ProcessInventory extends Controller
         }
     }
 
-    public function get_active_order_list(Int $org_id){
+    public function get_active_order_list(Request $request){
         try {
-            $sql = DB::select("Select UDF_GET_ORG_SCHEMA(?) as db;", [$org_id]);
+            $sql = DB::select("Select UDF_GET_ORG_SCHEMA(?) as db;", [$request->org_id]);
             if (!$sql) {
-                throw new Exception;
+                throw new Exception('Organization schema not found');
             }
+            
             $org_schema = $sql[0]->db;
             $db = Config::get('database.connections.mysql');
             $db['database'] = $org_schema;
             config()->set('database.connections.wax', $db);
         
-            $sql = DB::connection('wax')->select("SELECT 
-                m.Id,
-                m.Order_Date,
-                m.Order_No,
-                UDF_GET_PARTY_NAME(m.Party_Id) AS Party_Name,
-                m.Party_Id,
-                m.Tot_Amt,
-                d.Design_Id,
-                dn.Design_Name,
-                dn.Design_No,
-                dn.Image,
-                d.Order_Qnty,
-                d.Deg_Rate,
-                UDF_GET_ORDER_STATUS(m.Id) AS Order_Status,
-                d.Wt,
-                d.Wt_Rate,
-                d.Tot_Wt,
-                d.Polish_Rate,
-                d.Tot_Polish,
-                i.Item_Id,
-                UDF_GET_ITEM_NAME(i.Item_Id) As Item_Name,
-                i.Item_Qnty,
-                i.Item_Rate,
-                i.Making_Rate,
-                i.Item_Tot
-            FROM 
-                mst_order_master m
-            JOIN 
-                mst_order_details d ON d.Order_Id = m.Id
-            JOIN 
-                mst_design_master dn ON dn.Id = d.Design_Id
-            JOIN 
-                mst_order_item_details i ON i.Order_Id = m.Id AND i.Design_Id = d.Design_Id
-            WHERE 
-                m.Is_Invoise = 0;
-            ");
-        
-            if (empty($sql)) {
+            // Get filters and pagination parameters
+            $search = $request->input('keyword','');
+            $perPage = $request->input('per_page', 10); // Default 10 records per page
+            
+            // Build query with optional filter
+            $query = DB::connection('wax')->table('mst_order_master as m')
+                ->select(
+                    'm.Id',
+                    'm.Order_Date',
+                    'm.Order_No',
+                    DB::raw("UDF_GET_PARTY_NAME(m.Party_Id) AS Party_Name"),
+                    'm.Party_Id',
+                    'm.Tot_Amt',
+                    'd.Design_Id',
+                    'dn.Design_Name',
+                    'dn.Design_No',
+                    'dn.Image',
+                    'd.Order_Qnty',
+                    'd.Deg_Rate',
+                    DB::raw("UDF_GET_ORDER_STATUS(m.Id) AS Order_Status"),
+                    'd.Wt',
+                    'd.Wt_Rate',
+                    'd.Tot_Wt',
+                    'd.Polish_Rate',
+                    'd.Tot_Polish',
+                    'i.Item_Id',
+                    DB::raw("UDF_GET_ITEM_NAME(i.Item_Id) As Item_Name"),
+                    'i.Item_Qnty',
+                    'i.Item_Rate',
+                    'i.Making_Rate',
+                    'i.Item_Tot'
+                )
+                ->join('mst_order_details as d', 'd.Order_Id', '=', 'm.Id')
+                ->join('mst_design_master as dn', 'dn.Id', '=', 'd.Design_Id')
+                ->join('mst_order_item_details as i', function($join) {
+                    $join->on('i.Order_Id', '=', 'm.Id')
+                         ->on('i.Design_Id', '=', 'd.Design_Id');
+                })
+                ->where('m.Is_Invoise', 0);
+            
+            if (!empty($search)) {
+                $query->where(function ($q) use ($search) {
+                    $q->where('m.Order_No', 'LIKE', "%$search%")
+                      ->orWhere(DB::raw("UDF_GET_PARTY_NAME(m.Party_Id)"), 'LIKE', "%$search%");
+                });
+            }
+            
+            $orders = $query->paginate($perPage);
+            
+            if ($orders->isEmpty()) {
                 return response()->json([
                     'message' => 'No Data Found',
                     'details' => null,
                 ], 202);
             }
-        
+            
             $menu_set = [];
             
-            foreach ($sql as $row) {
-                // Initialize the main order structure
+            foreach ($orders as $row) {
                 if (!isset($menu_set[$row->Id])) {
                     $menu_set[$row->Id] = [
                         'Id' => $row->Id,
@@ -329,7 +376,6 @@ class ProcessInventory extends Controller
                     ];
                 }
         
-                // Add design details to the order
                 if (!isset($menu_set[$row->Id]['DesignRow'][$row->Design_Id])) {
                     $menu_set[$row->Id]['DesignRow'][$row->Design_Id] = [
                         'Design_Id' => $row->Design_Id,
@@ -342,12 +388,11 @@ class ProcessInventory extends Controller
                         'Tot_Wt' => $row->Tot_Wt,
                         'Polish' => $row->Polish_Rate,
                         'Tot_Polish' => $row->Tot_Polish,
-                        'Image' => $this->getUrl($org_id,$row->Image),
+                        'Image' => $this->getUrl($request->org_id, $row->Image),
                         'ItemRow' => []
                     ];
                 }
         
-                // Add item details to the corresponding design
                 if ($row->Item_Id) {
                     $menu_set[$row->Id]['DesignRow'][$row->Design_Id]['ItemRow'][] = [
                         'Item_Id' => $row->Item_Id,
@@ -360,25 +405,32 @@ class ProcessInventory extends Controller
                 }
             }
         
-            // Reset keys for DesignRow
             foreach ($menu_set as &$order) {
                 $order['DesignRow'] = array_values($order['DesignRow']);
             }
             $menu_set = array_values($menu_set);
-        
+            
             return response()->json([
                 'message' => 'Data Found',
-                'details' => $menu_set,
+                'details' => [
+                    'data' => $menu_set,
+                    'pagination' => [
+                        'total' => $orders->total(),
+                        'per_page' => $orders->perPage(),
+                        'current_page' => $orders->currentPage(),
+                        'last_page' => $orders->lastPage()
+                    ]
+                ]
             ], 200);
-        
+            
         } catch (Exception $ex) {
             $response = response()->json([
                 'message' => 'Error Found',
                 'details' => $ex->getMessage(),
             ], 400);
-        
             throw new HttpResponseException($response);
         }
+        
         
     }
 
@@ -447,9 +499,9 @@ class ProcessInventory extends Controller
         }
     }
 
-    public function get_work_status(Int $org_id,Int $order_id){
+    public function get_work_status(Request $request){
         try {
-            $sql = DB::select("Select UDF_GET_ORG_SCHEMA(?) as db;",[$org_id]);
+            $sql = DB::select("Select UDF_GET_ORG_SCHEMA(?) as db;",[$request->org_id]);
             if(!$sql){
               throw new Exception;
             }
@@ -458,7 +510,7 @@ class ProcessInventory extends Controller
             $db['database'] = $org_schema;
             config()->set('database.connections.wax', $db);
 
-            $sql = DB::connection('wax')->select("Select m.Design_Id,m.Work_Details,m.Work_Start,m.Work_End,d.Design_Name,d.Design_No,e.Emp_Name From mst_order_status m Join mst_design_master d On d.Id=m.Design_Id Join mst_employee_master e On e.Id=m.Work_Under Where m.Order_Id=?;",[$order_id]);
+            $sql = DB::connection('wax')->select("Select m.Design_Id,UDF_GET_STATUS_NAME(m.Work_Details) As Work_Details,m.Work_Start,m.Work_End,d.Design_Name,d.Design_No,e.Emp_Name From mst_order_status m Join mst_design_master d On d.Id=m.Design_Id Join mst_employee_master e On e.Id=m.Work_Under Where m.Order_Id=?;",[$request->order_id]);
 
             if (empty($sql)) {
                 // Custom validation for no data found
@@ -529,7 +581,7 @@ class ProcessInventory extends Controller
                 $create_tabl = DB::connection('wax')->statement("Create Temporary Table tempdetails
                                                                 (
                                                                     Design_Id		Int,
-                                                                    Work_Details	Varchar(250),
+                                                                    Work_Details	Int,
                                                                     Start_Date		Date,
                                                                     Work_Under		Int
                                                                 );");
@@ -583,9 +635,9 @@ class ProcessInventory extends Controller
         }
     }
 
-    public function get_complete_order_list(Int $org_id,Int $party_id){
+    public function get_complete_order_list(Request $request){
         try {
-            $sql = DB::select("Select UDF_GET_ORG_SCHEMA(?) as db;", [$org_id]);
+            $sql = DB::select("Select UDF_GET_ORG_SCHEMA(?) as db;", [$request->org_id]);
             if (!$sql) {
                 throw new Exception;
             }
@@ -594,44 +646,56 @@ class ProcessInventory extends Controller
             $db['database'] = $org_schema;
             config()->set('database.connections.wax', $db);
         
-            $sql = DB::connection('wax')->select("SELECT 
-                m.Id,
-                m.Order_Date,
-                m.Order_No,
-                UDF_GET_PARTY_NAME(m.Party_Id) AS Party_Name,
-                m.Party_Id,
-                m.Tot_Amt,
-                d.Design_Id,
-                dn.Design_Name,
-                dn.Design_No,
-                dn.Image,
-                d.Order_Qnty,
-                d.Deg_Rate,
-                UDF_GET_ORDER_STATUS(m.Id) AS Order_Status,
-                d.Wt_Rate,
-                d.Wt,
-                d.Tot_Wt,
-                d.Polish_Rate,
-                d.Tot_Polish,
-                i.Item_Id,
-                UDF_GET_ITEM_NAME(i.Item_Id) As Item_Name,
-                i.Item_Qnty,
-                i.Item_Rate,
-                i.Making_Rate,
-                i.Item_Tot
-            FROM 
-                mst_order_master m
-            JOIN 
-                mst_order_details d ON d.Order_Id = m.Id
-            JOIN 
-                mst_design_master dn ON dn.Id = d.Design_Id
-            JOIN 
-                mst_order_item_details i ON i.Order_Id = m.Id AND i.Design_Id = d.Design_Id
-            WHERE 
-                m.Is_Invoise = 0 And m.Party_Id=$party_id And (Select Count(*) From mst_order_status Where Order_Id=m.Id And Is_Complete=1)<>0;
-            ");
+            $query = DB::connection('wax')->table('mst_order_master as m')
+                ->join('mst_order_details as d', 'd.Order_Id', '=', 'm.Id')
+                ->join('mst_design_master as dn', 'dn.Id', '=', 'd.Design_Id')
+                ->join('mst_order_item_details as i', function($join) {
+                    $join->on('i.Order_Id', '=', 'm.Id')
+                         ->on('i.Design_Id', '=', 'd.Design_Id');
+                })
+                ->select(
+                    'm.Id',
+                    'm.Order_Date',
+                    'm.Order_No',
+                    DB::raw('UDF_GET_PARTY_NAME(m.Party_Id) AS Party_Name'),
+                    'm.Party_Id',
+                    'm.Tot_Amt',
+                    'd.Design_Id',
+                    'dn.Design_Name',
+                    'dn.Design_No',
+                    'dn.Image',
+                    'd.Order_Qnty',
+                    'd.Deg_Rate',
+                    DB::raw('UDF_GET_ORDER_STATUS(m.Id) AS Order_Status'),
+                    'd.Wt_Rate',
+                    'd.Wt',
+                    'd.Tot_Wt',
+                    'd.Polish_Rate',
+                    'd.Tot_Polish',
+                    'i.Item_Id',
+                    DB::raw('UDF_GET_ITEM_NAME(i.Item_Id) AS Item_Name'),
+                    'i.Item_Qnty',
+                    'i.Item_Rate',
+                    'i.Making_Rate',
+                    'i.Item_Tot'
+                )
+                ->where('m.Is_Invoise', 0)
+                ->where('m.Party_Id', $request->party_id)
+                ->whereRaw('(Select Count(*) From mst_order_status Where Order_Id=m.Id And Is_Complete=1)<>0');
         
-            if (empty($sql)) {
+            // Apply filtering
+            if ($request->has('keyword')) {
+                $search = $request->keyword;
+                $query->where(function($q) use ($search) {
+                    $q->where('m.Order_No', 'LIKE', "%$search%")
+                      ->orWhereRaw('UDF_GET_PARTY_NAME(m.Party_Id) LIKE ?', ["%$search%"]);
+                });
+            }
+        
+            // Paginate results
+            $sql = $query->paginate($request->per_page ?? 10);
+        
+            if ($sql->isEmpty()) {
                 return response()->json([
                     'message' => 'No Data Found',
                     'details' => null,
@@ -641,7 +705,6 @@ class ProcessInventory extends Controller
             $menu_set = [];
             
             foreach ($sql as $row) {
-                // Initialize the main order structure
                 if (!isset($menu_set[$row->Id])) {
                     $menu_set[$row->Id] = [
                         'Id' => $row->Id,
@@ -655,13 +718,12 @@ class ProcessInventory extends Controller
                     ];
                 }
         
-                // Add design details to the order
                 if (!isset($menu_set[$row->Id]['DesignRow'][$row->Design_Id])) {
                     $menu_set[$row->Id]['DesignRow'][$row->Design_Id] = [
                         'Design_Id' => $row->Design_Id,
                         'Design_Name' => $row->Design_Name,
                         'Design_No' => $row->Design_No,
-                        'Image' => $this->getUrl($org_id,$row->Image),
+                        'Image' => $this->getUrl($request->org_id, $row->Image),
                         'Order_Qnty' => $row->Order_Qnty,
                         'Design_Rate' => $row->Deg_Rate,
                         'Wt' => $row->Wt,
@@ -673,7 +735,6 @@ class ProcessInventory extends Controller
                     ];
                 }
         
-                // Add item details to the corresponding design
                 if ($row->Item_Id) {
                     $menu_set[$row->Id]['DesignRow'][$row->Design_Id]['ItemRow'][] = [
                         'Item_Id' => $row->Item_Id,
@@ -686,7 +747,6 @@ class ProcessInventory extends Controller
                 }
             }
         
-            // Reset keys for DesignRow
             foreach ($menu_set as &$order) {
                 $order['DesignRow'] = array_values($order['DesignRow']);
             }
@@ -695,8 +755,13 @@ class ProcessInventory extends Controller
             return response()->json([
                 'message' => 'Data Found',
                 'details' => $menu_set,
+                'pagination' => [
+                    'current_page' => $sql->currentPage(),
+                    'per_page' => $sql->perPage(),
+                    'total' => $sql->total(),
+                    'last_page' => $sql->lastPage()
+                ]
             ], 200);
-        
         } catch (Exception $ex) {
             $response = response()->json([
                 'message' => 'Error Found',
@@ -931,9 +996,9 @@ class ProcessInventory extends Controller
     }
     }
 
-    public function process_print_invoise(Int $org_id,Int $sale_id){
+    public function process_print_invoise(Request $request){
         try {
-            $sql = DB::select("Select UDF_GET_ORG_SCHEMA(?) as db;", [$org_id]);
+            $sql = DB::select("Select UDF_GET_ORG_SCHEMA(?) as db;", [$request->org_id]);
             if (!$sql) {
                 throw new Exception;
             }
@@ -987,7 +1052,7 @@ class ProcessInventory extends Controller
                                 mst_party_master p ON p.Id = m.Party_Id
                             WHERE
                                 m.Id = ?;
-            ",[$sale_id]);
+            ",[$request->sales_id]);
         
             if (empty($sql)) {
                 return response()->json([
@@ -1028,7 +1093,7 @@ class ProcessInventory extends Controller
                         'Design_Id' => $row->Design_Id,
                         'Design_Name' => $row->Design_Name,
                         'Design_No' => $row->Design_No,
-                        'Image' => $this->getUrl($org_id,$row->Image),
+                        'Image' => $this->getUrl($request->org_id,$row->Image),
                         'Order_Qnty' => $row->Deg_Qnty,
                         'Wt' => $row->Wt,
                         'Wt_Rate' => $row->Wt_Rate,
@@ -1073,76 +1138,98 @@ class ProcessInventory extends Controller
         }
     }
 
-    public function get_invoise_list(Int $org_id){
+    public function get_invoise_list(Request $request){
         try {
-            $sql = DB::select("Select UDF_GET_ORG_SCHEMA(?) as db;",[$org_id]);
-            if(!$sql){
-              throw new Exception;
+            $sql = DB::select("Select UDF_GET_ORG_SCHEMA(?) as db;", [$request->org_id]);
+            if (!$sql) {
+                throw new Exception;
             }
             $org_schema = $sql[0]->db;
             $db = Config::get('database.connections.mysql');
             $db['database'] = $org_schema;
             config()->set('database.connections.wax', $db);
-
-            $sql = DB::connection('wax')->select("Select m.Id,m.Sales_Date,m.Sales_No,p.Party_Name,p.Party_Add,p.Party_Gst,p.Party_Mob From trn_sales_master m Join mst_party_master p On p.Id=m.Party_Id;");
-
-            if (empty($sql)) {
-                // Custom validation for no data found
+        
+            $query = DB::connection('wax')->table('trn_sales_master as m')
+                ->join('mst_party_master as p', 'p.Id', '=', 'm.Party_Id')
+                ->select('m.Id', 'm.Sales_Date', 'm.Sales_No', 'p.Party_Name', 'p.Party_Add', 'p.Party_Gst', 'p.Party_Mob');
+            
+            // Apply search filter
+            if ($request->has('keyword')) {
+                $search = $request->input('keyword','');
+                $query->where(function ($q) use ($search) {
+                    $q->where('m.Sales_No', 'LIKE', "%$search%")
+                      ->orWhere('p.Party_Name', 'LIKE', "%$search%");
+                });
+            }
+            
+            // Apply pagination
+            $perPage = $request->input('per_page', 10); // Default 10 per page
+            $sales = $query->paginate($perPage);
+        
+            if ($sales->isEmpty()) {
                 return response()->json([
                     'message' => 'No Data Found',
                     'details' => null,
                 ], 202);
             }
-
+        
             return response()->json([
                 'message' => 'Data Found',
-                'details' => $sql,
-            ],200);
-
+                'details' => $sales,
+            ], 200);
         } catch (Exception $ex) {
             $response = response()->json([
                 'message' => 'Error Found',
                 'details' => $ex->getMessage(),
-            ],400);
-
+            ], 400);
+        
             throw new HttpResponseException($response);
         }
+        
     }
 
-    public function get_pur_party_list(Int $org_id){
+    public function get_pur_party_list(Request $request){
         try {
-            $sql = DB::select("Select UDF_GET_ORG_SCHEMA(?) as db;",[$org_id]);
-            if(!$sql){
-              throw new Exception;
+            $sql = DB::select("Select UDF_GET_ORG_SCHEMA(?) as db;", [$request->org_id]);
+            if (!$sql) {
+                throw new Exception;
             }
             $org_schema = $sql[0]->db;
             $db = Config::get('database.connections.mysql');
             $db['database'] = $org_schema;
             config()->set('database.connections.wax', $db);
-
-            $sql = DB::connection('wax')->select("Select Id,Party_Name,Party_Add,Party_Mob,Party_Gst From mst_party_master Where Party_Type=2;");
-
-            if (empty($sql)) {
-                // Custom validation for no data found
+        
+            $query = DB::connection('wax')->table('mst_party_master')
+                ->select('Id', 'Party_Name', 'Party_Add', 'Party_Mob', 'Party_Gst')
+                ->where('Party_Type', 2);
+        
+            // Apply filter if search term exists
+            if ($request->has('keyword')) {
+                $query->where('Party_Name', 'like', '%' . $request->keyword . '%');
+            }
+        
+            // Paginate the results
+            $sql = $query->paginate($request->per_page ?? 10);
+        
+            if ($sql->isEmpty()) {
                 return response()->json([
                     'message' => 'No Data Found',
                     'details' => null,
                 ], 202);
             }
-
+        
             return response()->json([
                 'message' => 'Data Found',
                 'details' => $sql,
-            ],200);
-
+            ], 200);
         } catch (Exception $ex) {
             $response = response()->json([
                 'message' => 'Error Found',
                 'details' => $ex->getMessage(),
-            ],400);
-
+            ], 400);
+        
             throw new HttpResponseException($response);
-        } 
+        }
     }
 
     public function process_purchase(Request $request){
@@ -1236,20 +1323,48 @@ class ProcessInventory extends Controller
         }
     }
 
-    public function get_pur_list(Int $org_id){
+    public function get_pur_list(Request $request){
         try {
-            $sql = DB::select("Select UDF_GET_ORG_SCHEMA(?) as db;", [$org_id]);
+            $sql = DB::select("Select UDF_GET_ORG_SCHEMA(?) as db;", [$request->org_id]);
             if (!$sql) {
-                throw new Exception;
+                throw new Exception("Organization schema not found");
             }
+        
             $org_schema = $sql[0]->db;
             $db = Config::get('database.connections.mysql');
             $db['database'] = $org_schema;
             config()->set('database.connections.wax', $db);
         
-            $sql = DB::connection('wax')->select("Select m.Id,m.Pur_Date,m.Pur_No,UDF_GET_PARTY_NAME(m.Party_Id) Party_Name,(m.Tot_Amt+m.Tot_CGST+m.Tot_SGST+m.Tot_IGST+m.Tot_Round-m.Tot_Discount) Total_Amount,d.Item_Id,UDF_GET_ITEM_NAME(d.Item_Id) Item_Name,d.Item_Qnty,d.Item_Rate,d.Item_Cgst,d.Item_Sgst,d.Item_Igst From trn_purchase_master m Join trn_purchase_details d On d.Pur_Id=m.Id;");
+            // Build base query
+            $query = DB::connection('wax')->table('trn_purchase_master as m')
+                ->join('trn_purchase_details as d', 'd.Pur_Id', '=', 'm.Id')
+                ->select(
+                    'm.Id',
+                    'm.Pur_Date',
+                    'm.Pur_No',
+                    DB::raw('UDF_GET_PARTY_NAME(m.Party_Id) AS Party_Name'),
+                    DB::raw('(m.Tot_Amt + m.Tot_CGST + m.Tot_SGST + m.Tot_IGST + m.Tot_Round - m.Tot_Discount) AS Total_Amount'),
+                    'd.Item_Id',
+                    DB::raw('UDF_GET_ITEM_NAME(d.Item_Id) AS Item_Name'),
+                    'd.Item_Qnty',
+                    'd.Item_Rate',
+                    'd.Item_Cgst',
+                    'd.Item_Sgst',
+                    'd.Item_Igst'
+                );
         
-            if (empty($sql)) {
+            // Apply keyword filter on both columns
+            if (!empty($request->keyword)) {
+                $query->where(function ($q) use ($request) {
+                    $q->where('m.Pur_No', 'like', '%' . $request->keyword . '%')
+                    ->orWhereRaw("UDF_GET_PARTY_NAME(m.Party_Id) LIKE ?", ['%' . $request->keyword . '%']);
+                });
+            }
+        
+            // Paginate results (10 records per page)
+            $purchases = $query->paginate(10);
+        
+            if ($purchases->isEmpty()) {
                 return response()->json([
                     'message' => 'No Data Found',
                     'details' => null,
@@ -1257,9 +1372,9 @@ class ProcessInventory extends Controller
             }
         
             $menu_set = [];
-            
-            foreach ($sql as $row) {
-                // Initialize the main order structure
+        
+            foreach ($purchases as $row) {
+                // Initialize purchase order structure
                 if (!isset($menu_set[$row->Id])) {
                     $menu_set[$row->Id] = [
                         'Id' => $row->Id,
@@ -1267,39 +1382,40 @@ class ProcessInventory extends Controller
                         'Purchase_No' => $row->Pur_No,
                         'Party_Name' => $row->Party_Name,
                         'Total_Amount' => $row->Total_Amount,
-                        "ItemRow" => [],
+                        'ItemRow' => []
                     ];
                 }
         
-                // Add design details to the order
-                if (!isset($menu_set[$row->Id]['ItemRow'][$row->Item_Id])) {
-                    $menu_set[$row->Id]['ItemRow'][] = [
-                        'Item_Id' => $row->Item_Id,
-                        'Item_Name' => $row->Item_Name,
-                        'Item_Qnty' => $row->Item_Qnty,
-                        'Item_Rate' => $row->Item_Rate,
-                        'Item_CGST' => $row->Item_Cgst,
-                        'Item_SGST' => $row->Item_Sgst,
-                        'Item_IGST' => $row->Item_Igst,
-                    ];
-                }
+                // Add item details to purchase order
+                $menu_set[$row->Id]['ItemRow'][] = [
+                    'Item_Id' => $row->Item_Id,
+                    'Item_Name' => $row->Item_Name,
+                    'Item_Qnty' => $row->Item_Qnty,
+                    'Item_Rate' => $row->Item_Rate,
+                    'Item_CGST' => $row->Item_Cgst,
+                    'Item_SGST' => $row->Item_Sgst,
+                    'Item_IGST' => $row->Item_Igst,
+                ];
             }
-        
-            $menu_set = array_values($menu_set);
         
             return response()->json([
                 'message' => 'Data Found',
-                'details' => $menu_set,
+                'details' => array_values($menu_set),
+                'pagination' => [
+                    'total' => $purchases->total(),
+                    'per_page' => $purchases->perPage(),
+                    'current_page' => $purchases->currentPage(),
+                    'last_page' => $purchases->lastPage()
+                ]
             ], 200);
         
         } catch (Exception $ex) {
-            $response = response()->json([
+            return response()->json([
                 'message' => 'Error Found',
                 'details' => $ex->getMessage(),
             ], 400);
-        
-            throw new HttpResponseException($response);
         }
+        
     }
 
     public function cancel_purchase(Request $request){
@@ -1341,6 +1457,128 @@ class ProcessInventory extends Controller
                     return response()->json([
                         'message' => 'Purchase Voucher Is Canceled Successfully !!',
                         'details' => null,
+                    ],200);
+                }
+
+            } catch (Exception $ex) {
+                DB::rollBack(); 
+                $response = response()->json([
+                    'message' => $ex->getMessage(),
+                    'details' => null,
+                ],400);
+    
+                throw new HttpResponseException($response);
+            }
+        }
+        else{
+            $errors = $validator->errors();
+
+            $response = response()->json([
+              'message' => $errors->messages(),
+              'details' => null,
+          ],202);
+      
+          throw new HttpResponseException($response);
+        }
+    }
+
+    public function process_gst_bill(Request $request){
+        $validator = Validator::make($request->all(),[
+            'org_id' =>'required',
+            'trans_date' => 'required',
+            'bill_no' => 'required',
+            'party_id' => 'required',
+            'tot_amt' => 'required',
+            'gst_rate' => 'required',
+            'cgst_amt' => 'required',
+            'sgst_amt' => 'required',
+            'igst_amt' => 'required',
+            'round_amt' => 'required',
+            'disc_amt' => 'required',
+            'year_id' => 'required',
+            'invoise_data' => 'required'
+        ]);
+        if($validator->passes()){
+            try {
+
+                $sql = DB::select("Select UDF_GET_ORG_SCHEMA(?) as db;",[$request->org_id]);
+                if(!$sql){
+                throw new Exception;
+                }
+                $org_schema = $sql[0]->db;
+                $db = Config::get('database.connections.mysql');
+                $db['database'] = $org_schema;
+                config()->set('database.connections.wax', $db);
+                DB::connection('wax')->beginTransaction();
+
+                $order_details = $this->convertToObject($request->invoise_data);
+                $drop_table = DB::connection('wax')->statement("Drop Temporary Table If Exists tempitem;");
+                $create_tabl = DB::connection('wax')->statement("Create Temporary Table tempitem
+                                                                (
+                                                                    Item_Name		Varchar(150),
+                                                                    Item_Qnty		Int,
+                                                                    Item_Unit		Int,
+                                                                    Item_Hsn		Int,
+                                                                    Item_Rate		Numeric(18,2),
+                                                                    Item_Tot		Numeric(18,2)
+                                                                );");
+                foreach ($order_details as $order_data) {
+                   DB::connection('wax')->statement("Insert Into tempitem (Item_Name,Item_Qnty,Item_Unit,Item_Hsn,Item_Rate,Item_Tot) Values (?,?,?,?,?,?);",[$order_data->item_name,$order_data->item_qnty,$order_data->item_unit,$order_data->item_hsn,$order_data->item_rate,$order_data->item_tot]);
+                }
+
+                $sql = DB::connection('wax')->statement("Call USP_ADD_GST_BILLS(?,?,?,?,?,?,?,?,?,?,?,?,@error,@message,@printdata);",[$request->trans_date,$request->bill_no,$request->party_id,$request->tot_amt,$request->gst_rate,$request->cgst_amt,$request->sgst_amt,$request->igst_amt,$request->round_amt,$request->disc_amt,$request->year_id,auth()->user()->Id]);
+
+                if(!$sql){
+                    throw new Exception;
+                }
+                $result = DB::connection('wax')->select("Select @error As Error_No,@message As Message,@printdata As Sales_Data;");
+                $error_No = $result[0]->Error_No;
+                $message = $result[0]->Message;
+                $sales_data = json_decode($result[0]->Sales_Data);
+                $invoise_data = [];
+
+                foreach ($sales_data as $invoise) {
+                    if(!isset($invoise_data[$invoise->Sales_Id])){
+                        $invoise_data[$invoise->Sales_Id] = [
+                            "Sales_Id" => $invoise->Sales_Id,
+                            "Sales_Date" => $invoise->Sales_Date,
+                            "Sales_No" => $invoise->Sales_No,
+                            "Party_Name" => $invoise->Party_Name,
+                            "Gross_Amt" => $invoise->Gross_Amount,
+                            "Cgst_Rate" => $invoise->CGST_Rate,
+                            "Cgst_Amt" => $invoise->CGST_Amt,
+                            "Sgst_Rate" => $invoise->SGST_Rate,
+                            "Sgst_Amt" => $invoise->SGST_Amt,
+                            "Igst_Amt" => $invoise->IGST_Amt,
+                            "Round_Amt" => $invoise->Bill_Round,
+                            "Discount" => $invoise->Bill_Discount,
+                            "ItemData" => [],
+                        ];
+                    }
+                    
+                        $invoise_data[$invoise->Sales_Id]["ItemData"][]=[
+                            "Item_Name" => $invoise->Item_Name,
+                            "Item_Qnty" => $invoise->Item_Qnty,
+                            "Item_Unit" => $invoise->Item_Unit,
+                            "Item_Rate" => $invoise->Item_Rate,
+                            "Item_Hsn" => $invoise->Item_HSN,
+                            "Item_Tot" => $invoise->Item_Tot,
+                        ];
+                    
+                }
+                $invoise_data = array_values($invoise_data);
+                if($error_No<0){
+                    DB::connection('wax')->rollBack();
+                    return response()->json([
+                        'message' => $message,
+                        'details' => null,
+                    ],202);
+                }
+                else{
+                    DB::connection('wax')->commit();
+                    return response()->json([
+                        'message' => $message,
+                        'details' => $invoise_data,
                     ],200);
                 }
 

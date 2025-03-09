@@ -85,6 +85,10 @@ Route::group([
     Route::put('/Org/UpdateUserProfile',[ProcessUserLogin::class,'update_user_profile']);
     Route::get('/Org/GetUserRele',[ProcessUserLogin::class,'get_user_role']);
     Route::post('/Org/AddUser',[ProcessUserLogin::class,'process_user']);
+    Route::get('/Org/GetUserList',[ProcessUserLogin::class,'get_user_list']);
+    Route::put('/Org/UpdateUser',[ProcessUserLogin::class,'update_org_user']);
+    Route::get('/Org/GetRoleMenue',[ProcessUserLogin::class,'get_role_menue']);
+    Route::post('/Org/MapUserRole',[ProcessUserLogin::class,'map_user_role']);
     Route::get('/Org/LogOut',[ProcessUserLogin::class,'process_logout']);
 
     // End Dashboard Route
@@ -130,59 +134,66 @@ Route::group([
     Route::get('/Org/Master/GetCatItem',[ProcessMaster::class,'get_cat_item_list']);
     Route::post('/Org/Master/UpdateDesign',[ProcessMaster::class,'update_design']);
     Route::post('/Org/Master/AddEmployee',[ProcessMaster::class,'process_employee']);
-    Route::get('/Org/Master/GetEmployeeList/{org_id}',[ProcessMaster::class,'get_emp_list']);
+    Route::get('/Org/Master/GetEmployeeList',[ProcessMaster::class,'get_emp_list']);
     Route::put('/Org/Master/UpdateEmployee',[ProcessMaster::class,'update_employee']);
-    Route::get('/Org/Master/GetBankLedger/{org_id}',[ProcessMaster::class,'get_bank_ledger']);
+    Route::get('/Org/Master/GetBankLedger',[ProcessMaster::class,'get_bank_ledger']);
     Route::post('/Org/Master/AddBankAccount',[ProcessMaster::class,'process_bank_Account']);
-    Route::get('/Org/Master/GetBankAccount/{org_id}',[ProcessMaster::class,'get_bank_acct_list']);
+    Route::get('/Org/Master/GetBankAccount',[ProcessMaster::class,'get_bank_acct_list']);
     Route::put('/Org/Master/UpdateBankAccount',[ProcessMaster::class,'update_bank_account']);
-    Route::get('/Org/Master/GetItemRate/{org_id}/{item_id}',[ProcessMaster::class,'get_item_rate']);
+    Route::get('/Org/Master/GetItemRate',[ProcessMaster::class,'get_item_rate']);
     Route::post('/Org/Master/PostItemRate',[ProcessMaster::class,'process_item_rate']);
+    Route::post('/Org/Master/AddWorkProcess',[ProcessMaster::class,'process_work_process']);
+    Route::get('/Org/Master/GetWorkProcess',[ProcessMaster::class,'get_work_list']);
+    Route::put('/Org/Master/UpdateWorkProcess',[ProcessMaster::class,'update_work_process']);
 
     // End Master Route
 
     // Inventory Voucher Route Start
 
-    Route::get('/Org/ProcessInventory/GetOrderParty/{org_id}',[ProcessInventory::class,'get_debtor_list']);
-    Route::get('/Org/ProcessInventory/GetOrderDesign/{org_id}',[ProcessInventory::class,'get_order_design']);
-    Route::get('/Org/ProcessInventory/GetDesignDetails/{org_id}/{design_id}',[ProcessInventory::class,'get_design_details']);
+    Route::get('/Org/ProcessInventory/GetOrderParty',[ProcessInventory::class,'get_debtor_list']);
+    Route::get('/Org/ProcessInventory/GetOrderDesign',[ProcessInventory::class,'get_order_design']);
+    Route::get('/Org/ProcessInventory/GetDesignDetails',[ProcessInventory::class,'get_design_details']);
     Route::post('/Org/ProcessInventory/PostOrder',[ProcessInventory::class,'process_order']);
-    Route::get('/Org/ProcessInventory/GetActiveOrder/{org_id}',[ProcessInventory::class,'get_active_order_list']);
+    Route::get('/Org/ProcessInventory/GetActiveOrder',[ProcessInventory::class,'get_active_order_list']);
     Route::put('/Org/ProcessInventory/CancelOrder',[ProcessInventory::class,'cancle_order']);
-    Route::get('/Org/ProcessInventory/GetWorkStatus/{org_id}/{order_id}',[ProcessInventory::class,'get_work_status']);
+    Route::get('/Org/ProcessInventory/GetWorkStatus',[ProcessInventory::class,'get_work_status']);
     Route::post('/Org/ProcessInventory/ProcessOrder',[ProcessInventory::class,'process_work_order']);
-    Route::get('/Org/ProcessInventory/GetInvoiseOrder/{org_id}/{party_id}',[ProcessInventory::class,'get_complete_order_list']);
+    Route::get('/Org/ProcessInventory/GetInvoiseOrder',[ProcessInventory::class,'get_complete_order_list']);
     Route::put('/Org/ProcessInventory/FinalOrderProcess',[ProcessInventory::class,'process_final_process']);
     Route::post('/Org/ProcessInventory/PostInvoise',[ProcessInventory::class,'process_invoise']);
     Route::put('/Org/ProcessInventory/CalcelInvoise',[ProcessInventory::class,'cancel_invoise']);
-    Route::get('/Org/ProcessInventory/GetInvoisePrint/{org_id}/{sale_id}',[ProcessInventory::class,'process_print_invoise']);
-    Route::get('/Org/ProcessInventory/InvoiseList/{org_id}',[ProcessInventory::class,'get_invoise_list']);
-    Route::get('/Org/ProcessInventory/GetPurchaseParty/{org_id}',[ProcessInventory::class,'get_pur_party_list']);
+    Route::get('/Org/ProcessInventory/GetInvoisePrint',[ProcessInventory::class,'process_print_invoise']);
+    Route::get('/Org/ProcessInventory/InvoiseList',[ProcessInventory::class,'get_invoise_list']);
+    Route::get('/Org/ProcessInventory/GetPurchaseParty',[ProcessInventory::class,'get_pur_party_list']);
     Route::post('/Org/ProcessInventory/PostPurchase',[ProcessInventory::class,'process_purchase']);
-    Route::get('/Org/ProcessInventory/GetPurchaseList/{org_id}',[ProcessInventory::class,'get_pur_list']);
+    Route::get('/Org/ProcessInventory/GetPurchaseList',[ProcessInventory::class,'get_pur_list']);
     Route::put('/Org/ProcessInventory/CancelPurchase',[ProcessInventory::class,'cancel_purchase']);
+    Route::post('/Org/ProcessInventory/AddGstBill',[ProcessInventory::class,'process_gst_bill']);
     // Inventory Voucher Route End
 
     // Accounting Voucher Route Start
 
-    Route::get('/Org/ProcessAccounting/GetLedgerList/{org_id}',[ProcessAccounting::class,'get_ledger_list']);
-    Route::get('/Org/ProcessAccounting/CheckParty/{org_id}/{ledger_id}',[ProcessAccounting::class,'get_ledger_party']);
+    Route::get('/Org/ProcessAccounting/GetLedgerList',[ProcessAccounting::class,'get_ledger_list']);
+    Route::get('/Org/ProcessAccounting/CheckParty',[ProcessAccounting::class,'get_ledger_party']);
     Route::post('/Org/ProcessAccounting/PostReceiptsVoucher',[ProcessAccounting::class,'process_receipts_voucher']);
-    Route::get('/Org/ProcessAccounting/GetReceiptVoucher/{org_id}',[ProcessAccounting::class,'get_recpt_list']);
+    Route::get('/Org/ProcessAccounting/GetReceiptVoucher',[ProcessAccounting::class,'get_recpt_list']);
     Route::put('/Org/ProcessAccounting/CancelReceiptVoucher',[ProcessAccounting::class,'cancel_recpt_voucher']);
     Route::post('/Org/ProcessAccounting/PostPaymentVoucher',[ProcessAccounting::class,'process_payment_voucher']);
-    Route::get('/Org/ProcessAccounting/GetPaymentVoucher/{org_id}',[ProcessAccounting::class,'get_payment_list']);
+    Route::get('/Org/ProcessAccounting/GetPaymentVoucher',[ProcessAccounting::class,'get_payment_list']);
     Route::put('/Org/ProcessAccounting/CancelPaymentVoucher',[ProcessAccounting::class,'cancel_payment_voucher']);
     Route::get('/Org/ProcessAccounting/GetBankBalance',[ProcessAccounting::class,'get_bank_balance']);
     Route::post('/Org/ProcessAccounting/PostBankDeposit',[ProcessAccounting::class,'process_bank_deposit']);
-    Route::get('/Org/ProcessAccounting/GetBankDeposit/{org_id}',[ProcessAccounting::class,'get_bank_dep_list']);
+    Route::get('/Org/ProcessAccounting/GetBankDeposit',[ProcessAccounting::class,'get_bank_dep_list']);
     Route::put('/Org/ProcessAccounting/CancelBankDeposit',[ProcessAccounting::class,'cancel_bank_deposit']);
     Route::post('/Org/ProcessAccounting/PostBankWithdrwan',[ProcessAccounting::class,'process_bank_withdrwan']);
-    Route::get('/Org/ProcessAccounting/GetBankWithdrwan/{org_id}',[ProcessAccounting::class,'get_bank_with_list']);
+    Route::get('/Org/ProcessAccounting/GetBankWithdrwan',[ProcessAccounting::class,'get_bank_with_list']);
     Route::put('/Org/ProcessAccounting/CancelBankWithdrwan',[ProcessAccounting::class,'cancel_bank_withdrwan']);
     Route::post('/Org/ProcessAccounting/PostBankTransfer',[ProcessAccounting::class,'process_bank_transfer']);
-    Route::get('/Org/ProcessAccounting/GetBankTransfer/{org_id}',[ProcessAccounting::class,'list_bank_transfer']);
+    Route::get('/Org/ProcessAccounting/GetBankTransfer',[ProcessAccounting::class,'list_bank_transfer']);
     Route::put('/Org/ProcessAccounting/CancelBankTransfer',[ProcessAccounting::class,'cancel_bank_transfer']);
+    Route::get('/Org/ProcessAccounting/GetTrailorUser',[ProcessAccounting::class,'get_trailor_list']);
+    Route::get('/Org/ProcessAccounting/GetTrailorBalance',[ProcessAccounting::class,'get_trailor_balance']);
+    Route::post('/Org/ProcessAccounting/AddTlrTrans',[ProcessAccounting::class,'process_tlr_trans']);
 
     // Accounting Voucher Route End
 
@@ -199,9 +210,10 @@ Route::group([
 
     Route::get('/Org/ProcessAccountingReport/Daybook',[ProcessAccountingReport::class,'process_daybook']);
     Route::get('/Org/ProcessAccountingReport/BankLedger',[ProcessAccountingReport::class,'process_bank_ledger']);
-    Route::get('/Org/ProcessAccountingReport/GetLedger/{org_id}',[ProcessAccountingReport::class,'process_ledger']);
+    Route::get('/Org/ProcessAccountingReport/GetLedger',[ProcessAccountingReport::class,'process_ledger']);
     Route::get('/Org/ProcessAccountingReport/GetAccountLedger',[ProcessAccountingReport::class,'process_acct_ledger']);
     Route::get('/Org/ProcessAccountingReport/CashBook',[ProcessAccountingReport::class,'process_cashbook']);
+    Route::get('/Org/ProcessAccountingReport/TlrBook',[ProcessAccountingReport::class,'process_tlrbook']);
     // End Accounting Report
 });
 

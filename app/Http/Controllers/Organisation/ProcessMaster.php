@@ -2104,7 +2104,7 @@ class ProcessMaster extends Controller
                 }
 
             } catch (Exception $ex) {
-                DB::rollBack(); 
+                DB::connection('wax')->rollBack(); 
                 $response = response()->json([
                     'message' => $ex->getMessage(),
                     'details' => null,
@@ -2428,40 +2428,65 @@ class ProcessMaster extends Controller
     }
     }
 
-    public function get_emp_list(Int $org_id){
+    public function get_emp_list(Request $request){
         try {
-            $sql = DB::select("Select UDF_GET_ORG_SCHEMA(?) as db;",[$org_id]);
-            if(!$sql){
-              throw new Exception;
+            $sql = DB::select("Select UDF_GET_ORG_SCHEMA(?) as db;", [$request->org_id]);
+            if (!$sql) {
+                throw new Exception('Organization schema not found');
             }
+            
             $org_schema = $sql[0]->db;
             $db = Config::get('database.connections.mysql');
             $db['database'] = $org_schema;
             config()->set('database.connections.wax', $db);
-
-            $sql = DB::connection('wax')->select("Select Id,Emp_Type,Case When Emp_Type=1 Then 'Permanent' When Emp_Type=2 Then 'Casual' When Emp_Type=3 Then 'Contractual' End As Employee_type,Emp_Name,Emp_Address,Emp_Mobile,Emp_Mail From mst_employee_master;");
-
-            if (empty($sql)) {
-                // Custom validation for no data found
+        
+            // Get filters and pagination parameters
+            $empName = $request->input('keyword','');
+            $perPage = $request->input('per_page', 10); // Default 10 records per page
+            
+            // Build query with optional filter
+            $query = DB::connection('wax')->table('mst_employee_master')
+                ->select(
+                    'Id',
+                    'Emp_Type',
+                    DB::raw("CASE 
+                                WHEN Emp_Type = 1 THEN 'Permanent' 
+                                WHEN Emp_Type = 2 THEN 'Casual' 
+                                WHEN Emp_Type = 3 THEN 'Contractual' 
+                              END AS Employee_type"),
+                    'Emp_Name',
+                    'Emp_Address',
+                    'Emp_Mobile',
+                    'Emp_Mail'
+                );
+            
+            if (!empty($empName)) {
+                $query->where('Emp_Name', 'LIKE', "%$empName%");
+            }
+            
+            $employees = $query->paginate($perPage);
+            
+            if ($employees->isEmpty()) {
                 return response()->json([
                     'message' => 'No Data Found',
                     'details' => null,
                 ], 202);
             }
-
+            
             return response()->json([
                 'message' => 'Data Found',
-                'details' => $sql,
-            ],200);
-
+                'details' => $employees,
+            ], 200);
+            
         } catch (Exception $ex) {
             $response = response()->json([
                 'message' => 'Error Found',
                 'details' => $ex->getMessage(),
-            ],400);
-
+            ], 400);
+        
             throw new HttpResponseException($response);
-        } 
+        }
+        
     }
 
     public function update_employee(Request $request){
@@ -2531,9 +2556,9 @@ class ProcessMaster extends Controller
     }
     }
 
-    public function get_bank_ledger(Int $org_id){
+    public function get_bank_ledger(Request $request){
         try {
-            $sql = DB::select("Select UDF_GET_ORG_SCHEMA(?) as db;",[$org_id]);
+            $sql = DB::select("Select UDF_GET_ORG_SCHEMA(?) as db;",[$request->org_id]);
             if(!$sql){
               throw new Exception;
             }
@@ -2635,9 +2660,9 @@ class ProcessMaster extends Controller
     }
     }
 
-    public function get_bank_acct_list(Int $org_id){
+    public function get_bank_acct_list(Request $request){
         try {
-            $sql = DB::select("Select UDF_GET_ORG_SCHEMA(?) as db;",[$org_id]);
+            $sql = DB::select("Select UDF_GET_ORG_SCHEMA(?) as db;",[$request->org_id]);
             if(!$sql){
               throw new Exception;
             }
@@ -2740,9 +2765,9 @@ class ProcessMaster extends Controller
     }
     }
 
-    public function get_item_rate(Int $org_id,Int $item_id){
+    public function get_item_rate(Request $request){
         try {
-            $sql = DB::select("Select UDF_GET_ORG_SCHEMA(?) as db;",[$org_id]);
+            $sql = DB::select("Select UDF_GET_ORG_SCHEMA(?) as db;",[$request->org_id]);
             if(!$sql){
               throw new Exception;
             }
@@ -2751,7 +2776,7 @@ class ProcessMaster extends Controller
             $db['database'] = $org_schema;
             config()->set('database.connections.wax', $db);
 
-            $sql = DB::connection('wax')->select("Select UDF_GET_ITEM_RATE(?) As Rate;",[$item_id]);
+            $sql = DB::connection('wax')->select("Select UDF_GET_ITEM_RATE(?) As Rate;",[$request->item_id]);
 
             if (empty($sql)) {
                 // Custom validation for no data found
@@ -2806,6 +2831,168 @@ class ProcessMaster extends Controller
                     'details' => null,
                 ],200);
             
+            
+        } catch (Exception $ex) {
+            DB::connection('wax')->rollBack();
+            $response = response()->json([
+                'message' => $ex->getMessage(),
+                'details' => null,
+            ],400);
+
+            throw new HttpResponseException($response);
+        }
+    }
+    else{
+        $errors = $validator->errors();
+
+            $response = response()->json([
+                'message' => $errors->messages(),
+                'details' => null,
+            ],202);
+        
+            throw new HttpResponseException($response);
+    }
+    }
+
+    public function process_work_process(Request $request){
+        $validator = Validator::make($request->all(),[
+            'org_id' => 'required',
+            'process_name' => 'required'
+        ]);
+        if($validator->passes()){
+        try {
+
+            $sql = DB::select("Select UDF_GET_ORG_SCHEMA(?) as db;",[$request->org_id]);
+            if(!$sql){
+              throw new Exception;
+            }
+            $org_schema = $sql[0]->db;
+            $db = Config::get('database.connections.mysql');
+            $db['database'] = $org_schema;
+            config()->set('database.connections.wax', $db);
+            DB::connection('wax')->beginTransaction();
+            $sql = DB::connection('wax')->statement("Call USP_ADD_EDIT_WORK_PROCESS(?,?,?,?,@error,@message);",[null,$request->process_name,auth()->user()->Id,1]);
+
+            if(!$sql){
+                throw new Exception('Operation Error Found !!');
+            }
+            $result = DB::connection('wax')->select("Select @error As Error,@message As Message;");
+            $error = $result[0]->Error;
+            $message = $result[0]->Message;
+
+            if($error<0){
+                DB::connection('wax')->rollBack();
+                return response()->json([
+                    'message' => $message,
+                    'details' => null,
+                ],202);
+            }
+            else{
+                DB::connection('wax')->commit();
+                return response()->json([
+                    'message' => 'Work Process Successfully Saved !!',
+                    'details' => null,
+                ],200);
+            }
+                
+            
+            
+        } catch (Exception $ex) {
+            DB::connection('wax')->rollBack();
+            $response = response()->json([
+                'message' => $ex->getMessage(),
+                'details' => null,
+            ],400);
+
+            throw new HttpResponseException($response);
+        }
+    }
+    else{
+        $errors = $validator->errors();
+
+            $response = response()->json([
+                'message' => $errors->messages(),
+                'details' => null,
+            ],202);
+        
+            throw new HttpResponseException($response);
+    }
+    }
+
+    public function get_work_list(Request $request){
+        try {
+
+            $sql = DB::select("Select UDF_GET_ORG_SCHEMA(?) as db;",[$request->org_id]);
+            if(!$sql){
+              throw new Exception;
+            }
+            $org_schema = $sql[0]->db;
+            $db = Config::get('database.connections.mysql');
+            $db['database'] = $org_schema;
+            config()->set('database.connections.wax', $db);
+            
+            $sql = DB::connection('wax')->select("Select Id,Process_Name From mst_work_status Where Is_Active=1;");
+
+            if(!$sql){
+                throw new Exception('Operation Error Found !!');
+            }
+           
+                return response()->json([
+                    'message' => 'Data Found',
+                    'details' => $sql,
+                ],200);
+                 
+        } catch (Exception $ex) {
+            $response = response()->json([
+                'message' => $ex->getMessage(),
+                'details' => null,
+            ],400);
+
+            throw new HttpResponseException($response);
+        }
+    }
+
+    public function update_work_process(Request $request){
+        $validator = Validator::make($request->all(),[
+            'org_id' => 'required',
+            'work_id' => 'required',
+            'process_name' => 'required'
+        ]);
+        if($validator->passes()){
+        try {
+
+            $sql = DB::select("Select UDF_GET_ORG_SCHEMA(?) as db;",[$request->org_id]);
+            if(!$sql){
+              throw new Exception;
+            }
+            $org_schema = $sql[0]->db;
+            $db = Config::get('database.connections.mysql');
+            $db['database'] = $org_schema;
+            config()->set('database.connections.wax', $db);
+            DB::connection('wax')->beginTransaction();
+            $sql = DB::connection('wax')->statement("Call USP_ADD_EDIT_WORK_PROCESS(?,?,?,?,@error,@message);",[$request->work_id,$request->process_name,auth()->user()->Id,2]);
+
+            if(!$sql){
+                throw new Exception('Operation Error Found !!');
+            }
+            $result = DB::connection('wax')->select("Select @error As Error,@message As Message;");
+            $error = $result[0]->Error;
+            $message = $result[0]->Message;
+
+            if($error<0){
+                DB::connection('wax')->rollBack();
+                return response()->json([
+                    'message' => $message,
+                    'details' => null,
+                ],202);
+            }
+            else{
+                DB::connection('wax')->commit();
+                return response()->json([
+                    'message' => 'Work Process Successfully Saved !!',
+                    'details' => null,
+                ],200);
+            }
             
         } catch (Exception $ex) {
             DB::connection('wax')->rollBack();
