@@ -226,4 +226,81 @@ class ProcessInventoryReport extends Controller
             throw new HttpResponseException($response);
         }
     }
+
+    public function process_party_item_ledger(Request $request){
+        try {
+            $sql = DB::select("Select UDF_GET_ORG_SCHEMA(?) as db;",[$request->org_id]);
+            if(!$sql){
+              throw new Exception;
+            }
+            $org_schema = $sql[0]->db;
+            $db = Config::get('database.connections.mysql');
+            $db['database'] = $org_schema;
+            config()->set('database.connections.wax', $db);
+
+            $sql = DB::connection('wax')->select("Call USP_RPT_PARTY_STONE(?,?,?);",[$request->party_id,$request->frm_date,$request->to_date]);
+
+            if (empty($sql)) {
+                // Custom validation for no data found
+                return response()->json([
+                    'message' => 'No Data Found',
+                    'details' => null,
+                ], 202);
+            }
+            
+            $ledger_data = [];
+            foreach ($sql as $ledg_data) {
+                if (!isset($ledger_data[$ledg_data->Party_Id])) {
+                    $ledger_data[$ledg_data->Party_Id] = [
+                        'Party_Name' => $ledg_data->Party_Name,
+                        'Party_Add' => $ledg_data->Party_Address,
+                        'Party_Gst' => $ledg_data->Party_GST,
+                        'Party_Mob' => $ledg_data->Party_Mobile,
+                        'ItemData' => [],
+                    ];
+                }
+            
+                if ($ledg_data->Item_Name) {
+                    if (!isset($ledger_data[$ledg_data->Party_Id]['ItemData'][$ledg_data->Item_Id])) {
+                        $ledger_data[$ledg_data->Party_Id]['ItemData'][$ledg_data->Item_Id] = [
+                            "Item_Name" => $ledg_data->Item_Name,
+                            "Trans_Details" => []
+                        ];
+                    }
+                }
+            
+                if ($ledg_data->Trans_Date) {
+                    $ledger_data[$ledg_data->Party_Id]["ItemData"][$ledg_data->Item_Id]["Trans_Details"][] = [
+                        "Trans_Date" => $ledg_data->Trans_Date,
+                        "Particular" => $ledg_data->Particular,
+                        "Issue" => $ledg_data->Issue,
+                        "Refund" => $ledg_data->Refund,
+                        "Balance" => $ledg_data->Balance
+                    ];
+                }
+            }
+            
+            // Convert Party Data to Indexed Array
+            $ledger_data = array_values($ledger_data);
+            
+            // Convert ItemData to Indexed Array inside each party
+            foreach ($ledger_data as &$party) {
+                $party['ItemData'] = array_values($party['ItemData']);
+            }
+            unset($party);
+            
+            return response()->json([
+                'message' => 'Data Found',
+                'details' => $ledger_data,
+            ],200);
+
+        } catch (Exception $ex) {
+            $response = response()->json([
+                'message' => 'Error Found',
+                'details' => $ex->getMessage(),
+            ],400);
+
+            throw new HttpResponseException($response);
+        }
+    }
 }

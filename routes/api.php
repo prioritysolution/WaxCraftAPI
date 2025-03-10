@@ -73,6 +73,9 @@ Route::post('/Admin/ProcessOrganisation/AddAdminUser',[ProcessOrganisation::clas
 // User Route Area
 
 Route::post('/User/ProcessLogin',[ProcessUserLogin::class,'process_user_login'])->middleware('api_access');
+Route::get('/User/GetOtp',[ProcessUserLogin::class,'genereate_otp']);
+Route::get('/User/VerefyOtp',[ProcessUserLogin::class,'verify_otp']);
+Route::put('/User/UpdtePassword',[ProcessUserLogin::class,'update_password']);
 
 Route::group([
     'middleware' => ['auth:sanctum',]
@@ -90,6 +93,8 @@ Route::group([
     Route::get('/Org/GetRoleMenue',[ProcessUserLogin::class,'get_role_menue']);
     Route::post('/Org/MapUserRole',[ProcessUserLogin::class,'map_user_role']);
     Route::get('/Org/LogOut',[ProcessUserLogin::class,'process_logout']);
+    Route::get('/Org/GetAccessUserList',[ProcessUserLogin::class,'get_active_user']);
+    Route::put('/Org/UpdateUserAccess',[ProcessUserLogin::class,'process_user_access']);
 
     // End Dashboard Route
 
@@ -203,6 +208,7 @@ Route::group([
     Route::get('/Org/ProcessInventoryReport/SalesRegister',[ProcessInventoryReport::class,'process_sales_register']);
     Route::get('/Org/ProcessInventoryReport/PurchaseRegister',[ProcessInventoryReport::class,'process_purchase_register']);
     Route::get('/Org/ProcessInventoryReport/GetPartyLedger',[ProcessInventoryReport::class,'process_party_ledger']);
+    Route::get('/Org/ProcessInventoryReport/GetPartyItemLedger',[ProcessInventoryReport::class,'process_party_item_ledger']);
 
     // End Inventory Report
 

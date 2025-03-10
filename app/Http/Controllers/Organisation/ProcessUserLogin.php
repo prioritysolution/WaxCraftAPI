@@ -5,6 +5,7 @@ use App\Http\Controllers\Controller;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Validator;
 use App\Models\OrgUser;
+use App\Traits\SendMail;
 use Illuminate\Http\Exceptions\HttpResponseException;
 use Hash;
 use Exception;
@@ -14,6 +15,7 @@ use \stdClass;
 
 class ProcessUserLogin extends Controller
 {
+    use SendMail;    
     public function convertToObject($array) {
         $object = new stdClass();
         foreach ($array as $key => $value) {
@@ -547,6 +549,196 @@ class ProcessUserLogin extends Controller
               'message' => $errors->messages(),
               'details' => null,
           ],202);
+      
+          throw new HttpResponseException($response);
+        }
+    }
+
+    public function genereate_otp(Request $request){
+        try {
+            $sql = DB::select("Select UDF_USEROTP(?,?,?) As OTP;",[$request->email,null,1]);
+    
+            if (empty($sql)) {
+                // Custom validation for no data found
+                return response()->json([
+                    'message' => 'No Data Found',
+                    'details' => null,
+                ], 202);
+            }
+            $otp = $sql[0]->OTP;
+            if($otp<0){
+                return response()->json([
+                    'message' => 'User Not Exists !!',
+                    'details' => $sql,
+                ],202);
+            }
+            else{
+                $this->otp_send($request->email,$otp,1);
+                return response()->json([
+                    'message' => 'Data Found',
+                    'details' => null,
+                ],200);
+            }
+            
+        } catch (Exception $ex) {
+            $response = response()->json([
+                'message' => 'Error Found',
+                'details' => $ex->getMessage(),
+            ],400);
+    
+            throw new HttpResponseException($response);
+        }
+    }
+
+    public function verify_otp(Request $request){
+        try {
+            $sql = DB::select("Select UDF_USEROTP(?,?,?) As OTP;",[$request->email,$request->otp,2]);
+    
+            if (empty($sql)) {
+                // Custom validation for no data found
+                return response()->json([
+                    'message' => 'No Data Found',
+                    'details' => null,
+                ], 202);
+            }
+            $otp = $sql[0]->OTP;
+            if($otp<0){
+                return response()->json([
+                    'message' => 'OTP Is Mismatched !!',
+                    'details' => $sql,
+                ],202);
+            }
+            else{
+                return response()->json([
+                    'message' => 'OTP Verified Successfully',
+                    'details' => null,
+                ],200);
+            }
+            
+        } catch (Exception $ex) {
+            $response = response()->json([
+                'message' => 'Error Found',
+                'details' => $ex->getMessage(),
+            ],400);
+    
+            throw new HttpResponseException($response);
+        }
+    }
+
+    public function update_password(Request $request){
+        $validator = Validator::make($request->all(),[
+            'user_mail' =>'required',
+            'user_pass' => 'required'
+        ]);
+
+        if($validator->passes()){
+            try {
+
+                DB::beginTransaction();
+
+                $sql = DB::statement("Update mst_org_user Set User_Pass=? Where User_Mail=?;",[Hash::make($request->user_pass),$request->user_mail]);
+
+                if(!$sql){
+                    DB::rollBack(); 
+                    throw new Exception ('Operation Could Not Be Complete !!');
+                }
+
+                    DB::commit();
+                    return response()->json([
+                        'message' => 'User Password Successfully Changed !!',
+                        'details' => null,
+                    ],200);
+
+            } catch (Exception $ex) {
+                DB::rollBack(); 
+                $response = response()->json([
+                    'message' => $ex->getMessage(),
+                    'details' => null,
+                ],400);
+    
+                throw new HttpResponseException($response);
+            }
+        }
+        else{
+            $errors = $validator->errors();
+
+            $response = response()->json([
+              'message' => $errors->messages(),
+              'details' => null,
+          ],400);
+      
+          throw new HttpResponseException($response);
+        }
+    }
+
+    public function get_active_user(Request $request){
+        try {
+            $sql = DB::select("Select Id,User_Name,User_Mail,Is_Active As Status From mst_org_user Where Org_Id=? And Role_Id<>1",[$request->org_id]);
+    
+            if (empty($sql)) {
+                // Custom validation for no data found
+                return response()->json([
+                    'message' => 'No Data Found',
+                    'details' => null,
+                ], 202);
+            }
+           
+                return response()->json([
+                    'message' => 'Data Found',
+                    'details' => $sql,
+                ],200);
+            
+        } catch (Exception $ex) {
+            $response = response()->json([
+                'message' => 'Error Found',
+                'details' => $ex->getMessage(),
+            ],400);
+    
+            throw new HttpResponseException($response);
+        }
+    }
+
+    public function process_user_access(Request $request){
+        $validator = Validator::make($request->all(),[
+            'user_id' =>'required',
+            'status' => 'required'
+        ]);
+
+        if($validator->passes()){
+            try {
+
+                DB::beginTransaction();
+
+                $sql = DB::statement("Update mst_org_user Set Is_Active=? Where Id=?;",[$request->status,$request->user_id]);
+
+                if(!$sql){
+                    DB::rollBack(); 
+                    throw new Exception ('Operation Could Not Be Complete !!');
+                }
+
+                    DB::commit();
+                    return response()->json([
+                        'message' => 'User Status Successfully Changed !!',
+                        'details' => null,
+                    ],200);
+
+            } catch (Exception $ex) {
+                DB::rollBack(); 
+                $response = response()->json([
+                    'message' => $ex->getMessage(),
+                    'details' => null,
+                ],400);
+    
+                throw new HttpResponseException($response);
+            }
+        }
+        else{
+            $errors = $validator->errors();
+
+            $response = response()->json([
+              'message' => $errors->messages(),
+              'details' => null,
+          ],400);
       
           throw new HttpResponseException($response);
         }
